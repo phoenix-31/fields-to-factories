@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 pub type GoodId = usize;
 pub type CharId = usize;
+pub type ResourceId = usize;
 
 #[derive(Clone, Copy)]
 pub struct ToolUse {
@@ -15,19 +16,13 @@ pub struct ToolUse {
     pub multiplier: f32,
 }
 
-impl ToolUse {
-    pub fn boost(&self, stock: f32) -> f32 {
-        1.0 / (1.0 - (1.0 - 1.0 / self.multiplier) * stock.clamp(0.0, 1.0))
-    }
-}
-
 #[derive(Clone)]
 pub struct Recipe {
     pub rate: f32,
-    pub uses_land: bool,
+    pub uses: Option<ResourceId>,
     pub improves: bool,
     pub inputs: Vec<(GoodId, f32)>,
-    pub tool: Option<ToolUse>,
+    pub tools: Vec<ToolUse>,
 }
 
 #[derive(Clone)]
@@ -44,6 +39,7 @@ pub struct Good {
 pub struct Catalog {
     pub goods: Vec<Good>,
     pub characteristics: Vec<String>,
+    pub resources: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -62,13 +58,13 @@ struct GoodDef {
 struct RecipeDef {
     rate: f32,
     #[serde(default)]
-    uses_land: bool,
+    uses: Option<String>,
     #[serde(default)]
     improves: bool,
     #[serde(default)]
     inputs: Vec<(String, f32)>,
     #[serde(default)]
-    tool: Option<ToolDef>,
+    tools: Vec<ToolDef>,
 }
 
 #[derive(Deserialize)]
@@ -99,6 +95,7 @@ impl Catalog {
         };
 
         let mut characteristics: Vec<String> = Vec::new();
+        let mut resources: Vec<String> = Vec::new();
         let mut goods = Vec::with_capacity(defs.len());
         for def in &defs {
             if def.recipe.rate <= 0.0 {
@@ -121,16 +118,27 @@ impl Catalog {
                 .iter()
                 .map(|(name, qty)| Ok((lookup(name, &def.name)?, *qty)))
                 .collect::<Result<_, String>>()?;
-            let tool = match &def.recipe.tool {
-                Some(t) => {
+            let tools = def
+                .recipe
+                .tools
+                .iter()
+                .map(|t| {
                     let good = lookup(&t.good, &def.name)?;
                     if defs[good].depreciation.is_none() {
                         return Err(format!("tool \"{}\" must have a depreciation rate", t.good));
                     }
-                    Some(ToolUse { good, multiplier: t.multiplier })
-                }
-                None => None,
-            };
+                    if t.multiplier < 1.0 {
+                        return Err(format!("tool \"{}\" needs a multiplier of at least 1", t.good));
+                    }
+                    Ok(ToolUse { good, multiplier: t.multiplier })
+                })
+                .collect::<Result<_, String>>()?;
+            let uses = def.recipe.uses.as_ref().map(|name| {
+                resources.iter().position(|r| r == name).unwrap_or_else(|| {
+                    resources.push(name.clone());
+                    resources.len() - 1
+                })
+            });
             goods.push(Good {
                 name: def.name.clone(),
                 sector: def.sector.clone(),
@@ -138,16 +146,16 @@ impl Catalog {
                 provides,
                 recipe: Recipe {
                     rate: def.recipe.rate,
-                    uses_land: def.recipe.uses_land,
+                    uses,
                     improves: def.recipe.improves,
                     inputs,
-                    tool,
+                    tools,
                 },
                 depreciation: def.depreciation,
             });
         }
 
-        let catalog = Self { goods, characteristics };
+        let catalog = Self { goods, characteristics, resources };
         for id in 0..catalog.len() {
             catalog.check_acyclic(id, &mut Vec::new())?;
         }
@@ -183,24 +191,37 @@ impl Catalog {
             .sum()
     }
 
-    pub fn tool_multiplier(&self, good: GoodId, stock: &[f32]) -> f32 {
-        match self.goods[good].recipe.tool {
-            Some(tool) => tool.boost(stock[tool.good]),
-            None => 1.0,
+    pub fn hours_factor(&self, good: GoodId, stock: &[f32]) -> f32 {
+        let tools = &self.goods[good].recipe.tools;
+        let (mut covered, mut factor, mut used) = (0.0, 1.0, 0u64);
+        while covered < 1.0 {
+            let best = (0..tools.len())
+                .filter(|&i| used & (1 << i) == 0)
+                .max_by(|&a, &b| tools[a].multiplier.total_cmp(&tools[b].multiplier));
+            let Some(i) = best else { break };
+            used |= 1 << i;
+            let share = stock[tools[i].good].clamp(0.0, 1.0 - covered);
+            factor -= (1.0 - 1.0 / tools[i].multiplier) * share;
+            covered += share;
         }
+        factor
     }
 
-    pub fn direct_rate(&self, good: GoodId, land: f32, stock: &[f32]) -> f32 {
+    pub fn tool_multiplier(&self, good: GoodId, stock: &[f32]) -> f32 {
+        1.0 / self.hours_factor(good, stock)
+    }
+
+    pub fn direct_rate(&self, good: GoodId, endowments: &[f32], stock: &[f32]) -> f32 {
         let recipe = &self.goods[good].recipe;
-        let land = if recipe.uses_land { land } else { 1.0 };
-        recipe.rate * land * self.tool_multiplier(good, stock)
+        let endowment = recipe.uses.map_or(1.0, |r| endowments[r]);
+        recipe.rate * endowment * self.tool_multiplier(good, stock)
     }
 
-    pub fn embodied_hours(&self, good: GoodId, land: f32, stock: &[f32]) -> Vec<f32> {
+    pub fn embodied_hours(&self, good: GoodId, endowments: &[f32], stock: &[f32]) -> Vec<f32> {
         let mut hours = vec![0.0; self.len()];
-        hours[good] = 1.0 / self.direct_rate(good, land, stock);
+        hours[good] = 1.0 / self.direct_rate(good, endowments, stock);
         for &(input, qty) in &self.goods[good].recipe.inputs {
-            for (h, sub) in hours.iter_mut().zip(self.embodied_hours(input, land, stock)) {
+            for (h, sub) in hours.iter_mut().zip(self.embodied_hours(input, endowments, stock)) {
                 *h += qty * sub;
             }
         }

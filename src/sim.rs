@@ -31,7 +31,7 @@ pub struct Person {
 }
 
 #[derive(Component)]
-pub struct LandQuality(pub f32);
+pub struct Endowments(pub Vec<f32>);
 
 #[derive(Component)]
 pub struct Needs(pub Vec<(CharId, f32)>);
@@ -149,7 +149,7 @@ fn spawn_people(
 ) {
     let mut people: Vec<_> = (0..POPULATION)
         .map(|_| {
-            let land = population.land_quality.draw(rng.next_f32());
+            let endowments: Vec<f32> = population.endowments.iter().map(|e| e.draw(rng.next_f32())).collect();
             let needs: Vec<(CharId, f32)> = population
                 .needs
                 .iter()
@@ -169,16 +169,18 @@ fn spawn_people(
                 })
                 .collect();
             let leisure = population.leisure.draw(rng.next_f32());
-            (land, needs, Tastes { preferences, leisure })
+            (endowments, needs, Tastes { preferences, leisure })
         })
         .collect();
-    let ease = |p: &(f32, Vec<(CharId, f32)>, Tastes)| p.0 / p.1.iter().map(|n| n.1).sum::<f32>().max(1e-6);
+    let ease = |p: &(Vec<f32>, Vec<(CharId, f32)>, Tastes)| {
+        p.0.iter().sum::<f32>() / p.1.iter().map(|n| n.1).sum::<f32>().max(1e-6)
+    };
     people.sort_by(|a, b| ease(b).total_cmp(&ease(a)));
 
-    for (rank, (land, needs, tastes)) in people.into_iter().enumerate() {
+    for (rank, (endowments, needs, tastes)) in people.into_iter().enumerate() {
         commands.spawn((
             Person { rank },
-            LandQuality(land),
+            Endowments(endowments),
             Needs(needs),
             tastes,
             Stock(vec![0.0; catalog.len()]),
@@ -210,32 +212,29 @@ fn leisure_value(tastes: &Tastes, hours: f32) -> f32 {
     tastes.leisure * (1.0 + hours).ln()
 }
 
-#[allow(clippy::too_many_arguments)]
-fn tool_gain(
-    catalog: &Catalog,
-    tool: GoodId,
-    stock: &[f32],
-    made: &[f32],
-    extra: f32,
-    last_year: &TimeUse,
-    hour_value: f32,
-    discount_rate: f32,
-) -> f32 {
+fn next_year_stock(catalog: &Catalog, stock: &[f32], made: &[f32]) -> Vec<f32> {
+    catalog
+        .goods
+        .iter()
+        .enumerate()
+        .map(|(g, def)| def.depreciation.map_or(0.0, |d| stock[g] * (1.0 - d) + made[g]))
+        .collect()
+}
+
+fn tool_gain(catalog: &Catalog, tool: GoodId, extra: f32, p: &Situation, next: &[f32], discount_rate: f32) -> f32 {
     let Some(depreciation) = catalog.goods[tool].depreciation else {
         return 0.0;
     };
-    let next = stock[tool] * (1.0 - depreciation) + made[tool];
+    let mut with_extra = next.to_vec();
+    with_extra[tool] += extra;
     let mut saved = 0.0;
     for (good, def) in catalog.goods.iter().enumerate() {
-        if let Some(t) = def.recipe.tool
-            && t.good == tool
-        {
-            saved += last_year.hours[good]
-                * t.boost(stock[tool])
-                * (1.0 / t.boost(next) - 1.0 / t.boost(next + extra));
+        if def.recipe.tools.iter().any(|t| t.good == tool) {
+            saved += p.last_year.hours[good] / catalog.hours_factor(good, p.stock)
+                * (catalog.hours_factor(good, next) - catalog.hours_factor(good, &with_extra));
         }
     }
-    saved * hour_value / (depreciation + discount_rate)
+    saved * p.hour_value / (depreciation + discount_rate)
 }
 
 struct DayPlan {
@@ -246,7 +245,7 @@ struct DayPlan {
 }
 
 struct Situation<'a> {
-    land: f32,
+    endowments: &'a [f32],
     needs: &'a Needs,
     tastes: &'a Tastes,
     stock: &'a [f32],
@@ -256,7 +255,7 @@ struct Situation<'a> {
 
 fn plan_day(catalog: &Catalog, discount_rate: f32, p: Situation) -> DayPlan {
     let n = catalog.len();
-    let embodied: Vec<Vec<f32>> = (0..n).map(|g| catalog.embodied_hours(g, p.land, p.stock)).collect();
+    let embodied: Vec<Vec<f32>> = (0..n).map(|g| catalog.embodied_hours(g, p.endowments, p.stock)).collect();
     let unit_hours: Vec<f32> = embodied.iter().map(|h| h.iter().sum()).collect();
     let mut need = vec![0.0; catalog.characteristics.len()];
     for &(c, amount) in &p.needs.0 {
@@ -296,6 +295,7 @@ fn plan_day(catalog: &Catalog, discount_rate: f32, p: Situation) -> DayPlan {
         let leisure_gain = leisure_value(p.tastes, time.leisure + SLICE) - leisure_value(p.tastes, time.leisure);
         let mut best = (leisure_gain, None);
         let now = enjoyment(p.tastes, &need, &amounts);
+        let next = next_year_stock(catalog, p.stock, &made);
         for good in 0..n {
             let extra = SLICE / unit_hours[good];
             let mut after = amounts.clone();
@@ -303,7 +303,7 @@ fn plan_day(catalog: &Catalog, discount_rate: f32, p: Situation) -> DayPlan {
                 after[c] += extra * per_unit;
             }
             let gain = enjoyment(p.tastes, &need, &after) - now
-                + tool_gain(catalog, good, p.stock, &made, extra, p.last_year, p.hour_value, discount_rate);
+                + tool_gain(catalog, good, extra, &p, &next, discount_rate);
             if gain > best.0 {
                 best = (gain, Some(good));
             }
@@ -329,7 +329,7 @@ fn allocate_time(
     catalog: Res<Catalog>,
     population: Res<Population>,
     mut people: Query<(
-        &LandQuality,
+        &Endowments,
         &Needs,
         &Tastes,
         &mut Stock,
@@ -339,12 +339,12 @@ fn allocate_time(
     )>,
 ) {
     people.par_iter_mut().for_each(
-        |(land, needs, tastes, mut stock, mut time, mut needs_met, mut hour_value)| {
+        |(endowments, needs, tastes, mut stock, mut time, mut needs_met, mut hour_value)| {
             let plan = plan_day(
                 &catalog,
                 population.discount_rate,
                 Situation {
-                    land: land.0,
+                    endowments: &endowments.0,
                     needs,
                     tastes,
                     stock: &stock.0,

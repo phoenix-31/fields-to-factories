@@ -6,10 +6,15 @@
 //                 Log(weight)               always wanted, each extra unit worth a bit less
 //                 Saturating(weight, scale) wanted until about `scale` extra, then barely
 // leisure       weight on free time (Log)
+// endowments    quality of each resource a person has access to; recipes that use it scale with it
 // discount_rate how much less next year matters; with wear, sets how far ahead tools are valued
 
 (
-    land_quality: (0.8, 1.2),
+    endowments: [
+        ("land", (0.8, 1.2)),
+        ("forest", (0.6, 1.4)),
+        ("ore", (0.2, 1.5)),
+    ],
     leisure: (0.8, 1.2),
     discount_rate: 0.05,
     needs: [

@@ -15,6 +15,13 @@ pub enum Spread {
 }
 
 impl Spread {
+    fn min(&self) -> f32 {
+        match *self {
+            Spread::Fixed(v) => v,
+            Spread::Range(lo, hi) => lo.min(hi),
+        }
+    }
+
     pub fn draw(&self, unit: f32) -> f32 {
         match *self {
             Spread::Fixed(v) => v,
@@ -46,7 +53,7 @@ impl Taste {
 
 #[derive(Resource, Clone)]
 pub struct Population {
-    pub land_quality: Spread,
+    pub endowments: Vec<Spread>,
     pub leisure: Spread,
     pub discount_rate: f32,
     pub needs: Vec<(CharId, Spread)>,
@@ -55,7 +62,7 @@ pub struct Population {
 
 #[derive(Deserialize)]
 struct PopulationDef {
-    land_quality: Spread,
+    endowments: Vec<(String, Spread)>,
     leisure: Spread,
     discount_rate: f32,
     needs: Vec<NeedDef>,
@@ -88,8 +95,22 @@ impl Population {
                 .characteristic(name)
                 .ok_or_else(|| format!("no good provides \"{name}\""))
         };
+        let endowments = catalog
+            .resources
+            .iter()
+            .map(|resource| {
+                def.endowments
+                    .iter()
+                    .find(|(name, _)| name == resource)
+                    .map(|(_, spread)| *spread)
+                    .ok_or_else(|| format!("goods use \"{resource}\" but there is no endowment for it"))
+            })
+            .collect::<Result<Vec<Spread>, String>>()?;
+        if let Some(i) = endowments.iter().position(|e| e.min() <= 0.0) {
+            return Err(format!("endowment \"{}\" must be above zero", catalog.resources[i]));
+        }
         Ok(Self {
-            land_quality: def.land_quality,
+            endowments,
             leisure: def.leisure,
             discount_rate: def.discount_rate,
             needs: def

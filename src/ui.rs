@@ -1,4 +1,4 @@
-//! Windowed front end: people grid, control panel and history chart, all driven by the catalog.
+//! Windowed front end: people grid, control panel, production tree and history chart.
 
 use bevy::camera::{CameraOutputMode, Viewport, visibility::RenderLayers};
 use bevy::prelude::*;
@@ -19,7 +19,6 @@ const GAP: f32 = 4.0;
 
 const LEISURE_COLOR: [u8; 3] = [78, 140, 230];
 const HUNGRY_COLOR: [u8; 3] = [214, 64, 64];
-const COVERAGE_COLOR: [u8; 3] = [235, 235, 235];
 
 #[derive(Resource)]
 struct SimSpeed {
@@ -150,9 +149,13 @@ fn draw_days(
 }
 
 fn swatch(ui: &mut egui::Ui, rgb: [u8; 3], label: &str) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-    ui.painter().rect_filled(rect, 2.0, color32(rgb));
-    ui.label(label);
+    let text_color = ui.visuals().text_color();
+    let galley = ui.painter().layout_no_wrap(label.to_string(), egui::FontId::proportional(13.0), text_color);
+    let size = egui::vec2(16.0 + galley.size().x, galley.size().y.max(12.0));
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let square = egui::Rect::from_min_size(rect.left_center() - egui::vec2(0.0, 6.0), egui::vec2(12.0, 12.0));
+    ui.painter().rect_filled(square, 2.0, color32(rgb));
+    ui.painter().galley(rect.min + egui::vec2(16.0, 0.0), galley, text_color);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -166,7 +169,7 @@ fn control_panel(
     population: Res<Population>,
     clock: Res<Clock>,
     history: Res<History>,
-    people: Query<(&LandQuality, &Needs, &TimeUse, &Stock)>,
+    people: Query<(&Endowments, &Needs, &TimeUse, &Stock)>,
     mut camera: Single<&mut Camera, Without<EguiContext>>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) -> Result {
@@ -184,20 +187,22 @@ fn control_panel(
         .resizable(false)
         .show(&mut root, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.heading("Fields to Factories · stage 2");
+                ui.heading("Fields to Factories · stage 3");
                 ui.label(format!("Year {}", clock.year));
                 ui.add_space(6.0);
                 controls(ui, &mut commands, &mut catalog, &mut economy, &mut speed, &definitions, &history);
                 ui.separator();
                 readout(ui, &catalog, &population, &history, &people);
-                ui.add_space(4.0);
+                ui.add_space(6.0);
+                production_tree(ui, &catalog, &history);
+                ui.add_space(6.0);
                 stacked_chart(ui, &catalog, &history);
                 ui.add_space(4.0);
                 ui.label(
                     egui::RichText::new(
-                        "Each bar is one person's day, best land top-left. People meet their needs \
-                         first, then spend spare hours on whatever their own tastes value most, \
-                         including tools that save hours next year.",
+                        "Each bar is one person's day, best-endowed top-left. People meet their \
+                         needs first, then spend spare hours on whatever their own tastes value \
+                         most, including tools that save hours next year.",
                     )
                     .weak(),
                 );
@@ -224,19 +229,21 @@ fn controls(
     history: &History,
 ) {
     let names: Vec<String> = catalog.goods.iter().map(|g| g.name.clone()).collect();
-    for good in &mut catalog.goods {
-        ui.add(
-            egui::Slider::new(&mut good.recipe.rate, 0.01..=MAX_RATE)
-                .logarithmic(true)
-                .text(format!("{} per hour", good.name)),
-        );
-        if let Some(tool) = &mut good.recipe.tool {
+    egui::CollapsingHeader::new("Production rates and tools").show(ui, |ui| {
+        for good in &mut catalog.goods {
             ui.add(
-                egui::Slider::new(&mut tool.multiplier, 1.0..=5.0)
-                    .text(format!("× {} with a {}", good.name, names[tool.good])),
+                egui::Slider::new(&mut good.recipe.rate, 0.01..=MAX_RATE)
+                    .logarithmic(true)
+                    .text(format!("{} per hour", good.name)),
             );
+            for tool in &mut good.recipe.tools {
+                ui.add(
+                    egui::Slider::new(&mut tool.multiplier, 1.0..=5.0)
+                        .text(format!("× {} with a {}", good.name, names[tool.good])),
+                );
+            }
         }
-    }
+    });
     ui.horizontal(|ui| {
         ui.checkbox(&mut economy.auto_growth, "improving goods get better by");
         ui.add(
@@ -278,12 +285,16 @@ fn controls(
     }
 }
 
+fn lighten(rgb: [u8; 3]) -> [u8; 3] {
+    rgb.map(|c| ((c as u16 + 2 * 255) / 3) as u8)
+}
+
 fn readout(
     ui: &mut egui::Ui,
     catalog: &Catalog,
     population: &Population,
     history: &History,
-    people: &Query<(&LandQuality, &Needs, &TimeUse, &Stock)>,
+    people: &Query<(&Endowments, &Needs, &TimeUse, &Stock)>,
 ) {
     let n = people.iter().count() as f32;
     if n == 0.0 {
@@ -301,12 +312,12 @@ fn readout(
         };
         let good = &catalog.goods[id];
         let (mut needed, mut actual, mut amount, mut boost) = (0.0, 0.0, 0.0, 0.0);
-        for (land, needs, time, stock) in people {
-            if time.hours.len() != catalog.len() {
+        for (endowments, needs, time, stock) in people {
+            if time.hours.len() != catalog.len() || stock.0.len() != catalog.len() {
                 return;
             }
             let need: f32 = needs.0.iter().filter(|n| n.0 == c).map(|n| n.1).sum();
-            let rate = catalog.provided(id, c) * catalog.direct_rate(id, land.0, &stock.0);
+            let rate = catalog.provided(id, c) * catalog.direct_rate(id, &endowments.0, &stock.0);
             needed += (need / rate).min(WAKING_HOURS);
             actual += time.hours[id];
             amount += need;
@@ -314,17 +325,19 @@ fn readout(
         }
         let (needed, actual, amount, boost) = (needed / n, actual / n, amount / n, boost / n);
         let characteristic = &catalog.characteristics[c];
-        let tool = good.recipe.tool.map(|t| catalog.goods[t.good].name.as_str());
-        let divisor = match tool {
-            Some(tool) => format!("({} per hour × {tool} boost)", good.name),
-            None => format!("{} per hour", good.name),
+        let has_tools = !good.recipe.tools.is_empty();
+        let divisor = if has_tools {
+            format!("({} per hour × tool boost)", good.name)
+        } else {
+            format!("{} per hour", good.name)
         };
         ui.label(
             egui::RichText::new(format!("hours {} ≈ {characteristic} needed ÷ {divisor}", good.sector)).strong(),
         );
-        let rate = match tool {
-            Some(_) => format!("({:.3} × {boost:.2})", good.recipe.rate),
-            None => format!("{:.3}", good.recipe.rate),
+        let rate = if has_tools {
+            format!("({:.3} × {boost:.2})", good.recipe.rate)
+        } else {
+            format!("{:.3}", good.recipe.rate)
         };
         ui.label(format!(
             "{amount:.2} ÷ {rate} = {needed:.1} h to meet the need, plus {:.1} h because people enjoy more",
@@ -335,32 +348,134 @@ fn readout(
     let Some(last) = history.0.last() else {
         return;
     };
-    for (id, good) in catalog.goods.iter().enumerate() {
-        if good.depreciation.is_some() {
-            ui.label(format!("{:.0}% of people have a working {}", last.coverage[id] * 100.0, good.name));
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Working tools:");
+        for (id, good) in catalog.goods.iter().enumerate() {
+            if good.depreciation.is_some() {
+                ui.colored_label(
+                    color32(lighten(good.color)),
+                    format!("{} {:.0}%", good.name, last.coverage[id] * 100.0),
+                );
+            }
+        }
+    });
+    ui.label(format!(
+        "Leisure {:.0}% of waking hours · hungry {:.0}% of people",
+        last.leisure_share * 100.0,
+        last.hungry_share * 100.0
+    ));
+}
+
+fn columns(catalog: &Catalog) -> Vec<usize> {
+    fn depth(catalog: &Catalog, good: GoodId, memo: &mut [Option<usize>]) -> usize {
+        if let Some(d) = memo[good] {
+            return d;
+        }
+        let recipe = &catalog.goods[good].recipe;
+        let upstream = recipe.inputs.iter().map(|&(i, _)| i).chain(recipe.tools.iter().map(|t| t.good));
+        let d = upstream.map(|u| depth(catalog, u, memo) + 1).max().unwrap_or(0);
+        memo[good] = Some(d);
+        d
+    }
+    let mut memo = vec![None; catalog.len()];
+    let depths: Vec<usize> = (0..catalog.len()).map(|g| depth(catalog, g, &mut memo)).collect();
+    let last = depths.iter().copied().max().unwrap_or(0);
+
+    let users = |good: GoodId| {
+        catalog.goods.iter().enumerate().filter(move |(_, other)| {
+            other.recipe.inputs.iter().any(|&(i, _)| i == good) || other.recipe.tools.iter().any(|t| t.good == good)
+        })
+    };
+    let mut cols = vec![last; catalog.len()];
+    let mut order: Vec<GoodId> = (0..catalog.len()).collect();
+    order.sort_by_key(|&g| std::cmp::Reverse(depths[g]));
+    for good in order {
+        if let Some(col) = users(good).map(|(user, _)| cols[user]).min() {
+            cols[good] = col.saturating_sub(1);
         }
     }
-    let shares: Vec<String> = catalog
-        .goods
-        .iter()
-        .zip(&last.shares)
-        .map(|(g, s)| format!("{} {:.0}%", g.sector, s * 100.0))
-        .chain([
-            format!("leisure {:.0}%", last.leisure_share * 100.0),
-            format!("hungry {:.0}% of people", last.hungry_share * 100.0),
-        ])
-        .collect();
-    ui.label(shares.join(" · "));
-
-    ui.add_space(4.0);
-    ui.horizontal_wrapped(|ui| {
-        for good in &catalog.goods {
-            swatch(ui, good.color, &good.sector);
+    for (good, def) in catalog.goods.iter().enumerate() {
+        if def.recipe.inputs.is_empty() && def.recipe.tools.is_empty() && users(good).next().is_some() {
+            cols[good] = 0;
         }
-        swatch(ui, LEISURE_COLOR, "leisure");
-        swatch(ui, HUNGRY_COLOR, "hungry");
-        swatch(ui, COVERAGE_COLOR, "tool owners");
-    });
+    }
+    cols
+}
+
+fn production_tree(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
+    let cols = columns(catalog);
+    let col_count = cols.iter().copied().max().unwrap_or(0) + 1;
+    let mut rows = vec![0usize; catalog.len()];
+    let mut per_col = vec![0usize; col_count];
+    for (good, &col) in cols.iter().enumerate() {
+        rows[good] = per_col[col];
+        per_col[col] += 1;
+    }
+    let max_rows = per_col.iter().copied().max().unwrap_or(1);
+
+    let (node_h, row_gap) = (34.0, 12.0);
+    let width = ui.available_width();
+    let col_w = width / col_count as f32;
+    let node_w = (col_w - 16.0).max(40.0);
+    let height = max_rows as f32 * (node_h + row_gap);
+    let (response, painter) = ui.allocate_painter(egui::vec2(width, height), egui::Sense::hover());
+    let origin = response.rect.min;
+    let node_rect = |good: GoodId| {
+        let col_rows = per_col[cols[good]] as f32;
+        let top = (height - col_rows * (node_h + row_gap)) / 2.0 + rows[good] as f32 * (node_h + row_gap);
+        egui::Rect::from_min_size(
+            origin + egui::vec2(cols[good] as f32 * col_w + (col_w - node_w) / 2.0, top + row_gap / 2.0),
+            egui::vec2(node_w, node_h),
+        )
+    };
+
+    let edge = egui::Color32::from_gray(150);
+    for (good, def) in catalog.goods.iter().enumerate() {
+        let to = node_rect(good).left_center();
+        for &(input, _) in &def.recipe.inputs {
+            let from = node_rect(input).right_center();
+            painter.line_segment([from, to], egui::Stroke::new(1.2, edge));
+            let dir = (to - from).normalized() * 7.0;
+            painter.arrow(to - dir, dir, egui::Stroke::new(1.2, edge));
+        }
+        for tool in &def.recipe.tools {
+            let from = node_rect(tool.good).right_center();
+            painter.extend(egui::Shape::dashed_line(&[from, to], egui::Stroke::new(1.2, edge), 4.0, 3.0));
+            let dir = (to - from).normalized() * 7.0;
+            painter.arrow(to - dir, dir, egui::Stroke::new(1.2, edge));
+        }
+    }
+
+    let shares = history.0.last().map(|s| s.shares.clone()).unwrap_or_default();
+    for (good, def) in catalog.goods.iter().enumerate() {
+        let rect = node_rect(good);
+        painter.rect_filled(rect, 4.0, color32(def.color));
+        let [r, g, b] = def.color;
+        let luminance = 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
+        let text = if luminance > 140.0 { egui::Color32::from_gray(20) } else { egui::Color32::from_gray(240) };
+        let name_size = if painter.layout_no_wrap(def.name.clone(), egui::FontId::proportional(11.0), text).size().x
+            > node_w - 6.0
+        {
+            9.0
+        } else {
+            11.0
+        };
+        painter.text(
+            rect.center() - egui::vec2(0.0, 7.0),
+            egui::Align2::CENTER_CENTER,
+            &def.name,
+            egui::FontId::proportional(name_size),
+            text,
+        );
+        let share = shares.get(good).copied().unwrap_or(0.0) * 100.0;
+        painter.text(
+            rect.center() + egui::vec2(0.0, 8.0),
+            egui::Align2::CENTER_CENTER,
+            format!("{share:.1}% of hours"),
+            egui::FontId::proportional(10.0),
+            text,
+        );
+    }
 }
 
 fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
@@ -383,7 +498,7 @@ fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
         .iter()
         .map(|s| [s.year as f64, s.hungry_share as f64 * 100.0])
         .collect();
-    let coverage: Vec<(String, PlotPoints)> = catalog
+    let coverage: Vec<(String, [u8; 3], PlotPoints)> = catalog
         .goods
         .iter()
         .enumerate()
@@ -393,12 +508,12 @@ fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
                 .iter()
                 .map(|s| [s.year as f64, s.coverage.get(id).copied().unwrap_or(0.0) as f64 * 100.0])
                 .collect();
-            (format!("% with a {}", g.name), points)
+            (format!("% with a {}", g.name), lighten(g.color), points)
         })
         .collect();
 
     Plot::new("time_use")
-        .height(300.0)
+        .height(260.0)
         .include_y(0.0)
         .include_y(100.0)
         .include_x(0.0)
@@ -412,8 +527,16 @@ fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
                 plot.add(FilledArea::new(name.clone(), &xs, lower, upper).fill_color(color32(*color)));
             }
             plot.line(Line::new("hungry (% of people)", hungry).color(color32(HUNGRY_COLOR)).width(2.0));
-            for (name, points) in coverage {
-                plot.line(Line::new(name, points).color(color32(COVERAGE_COLOR)).width(1.5));
+            for (name, color, points) in coverage {
+                plot.line(Line::new(name, points).color(color32(color)).width(2.0));
             }
         });
+
+    ui.horizontal_wrapped(|ui| {
+        for good in &catalog.goods {
+            swatch(ui, good.color, &good.sector);
+        }
+        swatch(ui, LEISURE_COLOR, "leisure");
+        swatch(ui, HUNGRY_COLOR, "hungry");
+    });
 }

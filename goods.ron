@@ -3,10 +3,11 @@
 // provides      what one unit gives a person, e.g. [("nourishment", 1.0)]; tools and inputs provide nothing
 // recipe:
 //   rate        units made per hour of work
-//   uses_land   output scales with the worker's land quality
+//   uses        a resource whose quality (per person, see people.ron) scales the rate
 //   improves    rate grows each year when "improving goods get better" is on
-//   inputs      goods used up per unit made, e.g. [("wares", 2.0)]
-//   tool        a durable good that multiplies this recipe's rate, up to one per person
+//   inputs      goods used up per unit made, e.g. [("wood", 2.0)]
+//   tools       durable goods that multiply this recipe's rate; the best one owned is used first,
+//               and together they cover at most one person's work
 // depreciation  share of a durable good's stock that wears out each year
 
 #![enable(implicit_some)]
@@ -18,9 +19,12 @@
         provides: [("nourishment", 1.0)],
         recipe: (
             rate: 0.08,
-            uses_land: true,
+            uses: "land",
             improves: true,
-            tool: (good: "plough", multiplier: 2.0),
+            tools: [
+                (good: "wooden plough", multiplier: 1.5),
+                (good: "iron plough", multiplier: 2.5),
+            ],
         ),
     ),
     (
@@ -31,10 +35,41 @@
         recipe: (rate: 1.0),
     ),
     (
-        name: "plough",
-        sector: "plough-making",
+        name: "wood",
+        sector: "forestry",
+        color: (140, 98, 57),
+        recipe: (rate: 1.0, uses: "forest"),
+    ),
+    (
+        name: "charcoal",
+        sector: "charcoal-burning",
+        color: (96, 96, 104),
+        recipe: (rate: 1.0, inputs: [("wood", 3.0)]),
+    ),
+    (
+        name: "ore",
+        sector: "mining",
+        color: (128, 146, 170),
+        recipe: (rate: 0.5, uses: "ore"),
+    ),
+    (
+        name: "iron",
+        sector: "smelting",
+        color: (200, 80, 120),
+        recipe: (rate: 0.5, inputs: [("ore", 2.0), ("charcoal", 2.0)]),
+    ),
+    (
+        name: "wooden plough",
+        sector: "wooden plough-making",
+        color: (214, 190, 140),
+        recipe: (rate: 0.25, inputs: [("wood", 2.0)]),
+        depreciation: 0.15,
+    ),
+    (
+        name: "iron plough",
+        sector: "iron plough-making",
         color: (176, 112, 214),
-        recipe: (rate: 0.05, inputs: [("wares", 2.0)]),
-        depreciation: 0.05,
+        recipe: (rate: 0.1, inputs: [("iron", 2.0), ("wood", 2.0)]),
+        depreciation: 0.04,
     ),
 ]

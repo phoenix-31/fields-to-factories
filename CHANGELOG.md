@@ -1,5 +1,25 @@
 # Changelog
 
+## Stage 3: iron and charcoal
+
+### Added
+- **A deeper production tree.** Wood (forests) and ore (mines) are raw materials; charcoal is burned from wood; iron is smelted from ore and charcoal; an iron plough needs iron and wood.
+- **Two ploughs.** A cheap wooden plough (×1.5 farm output, wears out at 15% a year) and an iron plough (×2.5, 4% a year). A recipe can list several tools; the best one owned covers the work first, and together they cover at most one person's work.
+- **Uneven geography.** People draw the quality of their land, forest and ore from ranges in `people.ron`. A recipe's `uses` names the resource that scales it.
+- **Production tree diagram** in the panel, showing each good's share of hours, inputs as solid arrows and tools as dashed ones.
+- **Validation** for missing or non-positive endowments and tool multipliers below 1.
+
+### Changed
+- `recipe.uses_land` became `recipe.uses: "<resource>"`, and `recipe.tool` became `recipe.tools: [...]`.
+- `land_quality` in `people.ron` became the `endowments` list.
+- **Panel.** Rate and tool sliders moved into a collapsible section, each tool has its own coloured ownership line, and the grid ranks people by total endowment.
+
+### Results
+- Wooden ploughs spread in year 2; iron ploughs overtake them by year 8.
+- At year 20, 97% of people with rich ore own an iron plough, against 50% with poor ore.
+- When farming gets cheap, people downgrade from iron to wooden ploughs before giving them up.
+- Making ore four times harder to mine cuts iron-plough ownership at year 20 from 83% to 23%.
+
 ## Stage 2.1: people own their wants
 
 ### Changed
