@@ -22,7 +22,7 @@ pub struct ToolUse {
 pub struct Recipe {
     pub rate: f32,
     pub uses: Option<ResourceId>,
-    pub improves: bool,
+    pub improves: f32,
     pub inputs: Vec<(GoodId, f32)>,
     pub tools: Vec<ToolUse>,
 }
@@ -69,7 +69,7 @@ struct RecipeDef {
     #[serde(default)]
     uses: Option<String>,
     #[serde(default)]
-    improves: bool,
+    improves: f32,
     #[serde(default)]
     inputs: Vec<(String, f32)>,
     #[serde(default)]
@@ -109,6 +109,9 @@ impl Catalog {
         for def in &defs {
             if def.recipe.rate <= 0.0 {
                 return Err(format!("\"{}\" needs a positive rate", def.name));
+            }
+            if def.recipe.improves < 0.0 {
+                return Err(format!("\"{}\" can't improve by a negative amount", def.name));
             }
             let provides = def
                 .provides

@@ -1,5 +1,24 @@
 # Changelog
 
+## Stage 4.1: real goods for freed time
+
+### Changed
+- **Wares are gone,** replaced by real goods for different wants:
+  - **Clothing** comes from a textile chain (flax on land → cloth → clothing) and provides **warmth**. Warmth is a new need, met right after nourishment, and also a taste beyond it.
+  - **Furniture** is made from wood and provides **comfort**, the open-ended want.
+- **Each recipe has its own improvement rate.** `improves: true` became `improves: 0.015` (1.5% a year). Weaving improves fastest (2%), farming 1.5%, flax and iron 1%, and tailoring, carpentry, forestry and mining 0.5%. The panel's growth control became a "technology improves, at N×" multiplier.
+- **Buying is gradual.** The cheaper buying is compared with making, the larger the share of a good (or input) a person buys. Before, everyone flipped at once, which made flax swing between all-bought and all-sold from year to year.
+- "Hungry" became "needs unmet", since there are now two needs.
+
+### Fixed
+- **Prices were scaled by an average wage that counted the self-sufficient as earning 0,** which inflated every price about fivefold while the market was forming.
+- **The chart's year axis** showed no labels between years 50 and 100.
+
+### Results
+- Unmatched trade fell from about 8% to 4–5% a year once the market has formed.
+- Baumol's cost disease appears: weaving shrinks from 3–4% to under 1% of hours as it mechanises, while slow-improving carpentry grows to about a third of the day by year 200, and forestry grows with it.
+- Iron-plough ownership shows an investment echo: it peaks around year 20, then dips as that cohort wears out.
+
 ## Stage 4: trade
 
 ### Added

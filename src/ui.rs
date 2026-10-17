@@ -198,7 +198,7 @@ fn control_panel(
         .resizable(false)
         .show(&mut root, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.heading("Fields to Factories · stage 4");
+                ui.heading("Fields to Factories · stage 4.1");
                 ui.label(format!("Year {}", clock.year));
                 ui.add_space(6.0);
                 controls(ui, &mut commands, &mut catalog, &mut economy, &mut market, &mut speed, &definitions, &history);
@@ -258,15 +258,9 @@ fn controls(
         }
     });
     ui.horizontal(|ui| {
-        ui.checkbox(&mut economy.auto_growth, "improving goods get better by");
-        ui.add(
-            egui::DragValue::new(&mut economy.growth_rate)
-                .range(0.0..=0.1)
-                .speed(0.001)
-                .custom_formatter(|v, _| format!("{:.1}%", v * 100.0))
-                .custom_parser(|s| s.trim_end_matches('%').parse::<f64>().ok().map(|v| v / 100.0)),
-        );
-        ui.label("a year");
+        ui.checkbox(&mut economy.progress, "technology improves, at");
+        ui.add(egui::DragValue::new(&mut economy.tech_speed).range(0.0..=5.0).speed(0.02).suffix("×"));
+        ui.label("the rates in goods.ron");
     });
     ui.add(
         egui::Slider::new(&mut market.trade_cost, 0.0..=2.0)
@@ -330,6 +324,9 @@ fn readout(
             continue;
         };
         let good = &catalog.goods[id];
+        if !good.recipe.inputs.is_empty() {
+            continue;
+        }
         let (mut needed, mut actual, mut amount, mut boost) = (0.0, 0.0, 0.0, 0.0);
         for (endowments, needs, time, tools) in people {
             if time.hours.len() != catalog.len() || tools.years_left.len() != catalog.len() {
@@ -380,7 +377,7 @@ fn readout(
         }
     });
     ui.label(format!(
-        "Leisure {:.0}% of waking hours · hungry {:.0}% of people",
+        "Leisure {:.0}% of waking hours · needs unmet for {:.0}% of people",
         last.leisure_share * 100.0,
         last.hungry_share * 100.0
     ));
@@ -576,12 +573,17 @@ fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
         .allow_zoom(false)
         .allow_scroll(false)
         .x_axis_label("year")
+        .x_grid_spacer(egui_plot::uniform_grid_spacer(|input| {
+            let span = input.bounds.1 - input.bounds.0;
+            let step = [10.0, 20.0, 50.0, 100.0].into_iter().find(|s| span / s <= 8.0).unwrap_or(200.0);
+            [step / 5.0, step, step * 5.0]
+        }))
         .y_axis_label("% of waking hours")
         .show(ui, |plot| {
             for (name, color, lower, upper) in &bands {
                 plot.add(FilledArea::new(name.clone(), &xs, lower, upper).fill_color(color32(*color)));
             }
-            plot.line(Line::new("hungry (% of people)", hungry).color(color32(HUNGRY_COLOR)).width(2.0));
+            plot.line(Line::new("needs unmet (% of people)", hungry).color(color32(HUNGRY_COLOR)).width(2.0));
             for (name, color, points) in coverage {
                 plot.line(Line::new(name, points).color(color32(color)).width(2.0));
             }
@@ -599,7 +601,7 @@ fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
         }
         swatch(ui, TRADING_COLOR, "trading");
         swatch(ui, LEISURE_COLOR, "leisure");
-        swatch(ui, HUNGRY_COLOR, "hungry");
+        swatch(ui, HUNGRY_COLOR, "needs unmet");
         swatch(ui, SPECIALISATION_COLOR, "specialisation (dashed)");
     });
 }

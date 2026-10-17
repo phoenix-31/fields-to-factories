@@ -95,13 +95,13 @@ pub struct HourValue(pub f32);
 
 #[derive(Resource)]
 pub struct Economy {
-    pub auto_growth: bool,
-    pub growth_rate: f32,
+    pub progress: bool,
+    pub tech_speed: f32,
 }
 
 impl Default for Economy {
     fn default() -> Self {
-        Self { auto_growth: true, growth_rate: 0.015 }
+        Self { progress: true, tech_speed: 1.0 }
     }
 }
 
@@ -248,9 +248,10 @@ fn open_market(mut market: ResMut<Market>, catalog: Res<Catalog>, people: Query<
 
 fn advance_technology(mut catalog: ResMut<Catalog>, economy: Res<Economy>, mut clock: ResMut<Clock>) {
     clock.year += 1;
-    if economy.auto_growth {
-        for good in catalog.goods.iter_mut().filter(|g| g.recipe.improves) {
-            good.recipe.rate = (good.recipe.rate * (1.0 + economy.growth_rate)).min(MAX_RATE);
+    if economy.progress {
+        for good in &mut catalog.goods {
+            let growth = 1.0 + good.recipe.improves * economy.tech_speed;
+            good.recipe.rate = (good.recipe.rate * growth).min(MAX_RATE);
         }
     }
 }
@@ -481,8 +482,10 @@ fn clear_market(mut market: ResMut<Market>, catalog: Res<Catalog>, people: Query
             bought[g] += trades.bought[g];
             sold[g] += trades.sold[g];
         }
-        wages += wage.0;
-        count += 1.0;
+        if wage.0 > 0.0 {
+            wages += wage.0;
+            count += 1.0;
+        }
     }
     market.adjust(bought, sold, wages / count.max(1.0));
 }

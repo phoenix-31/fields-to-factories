@@ -6,6 +6,7 @@ use crate::goods::{Catalog, GoodId};
 
 const PRICE_SPEED: f32 = 0.2;
 const JOB_SPREAD: f32 = 0.1;
+const BUY_SPREAD: f32 = 0.1;
 const ROUTE_PASSES: usize = 4;
 
 #[derive(Resource, Clone)]
@@ -104,7 +105,7 @@ pub fn plan_routes(
 ) -> Routes {
     let n = catalog.len();
     let direct: Vec<f32> = (0..n).map(|g| 1.0 / catalog.direct_rate(g, endowments, owned)).collect();
-    let (mut hours, mut money, mut buy_input) = (vec![0.0; n], vec![0.0; n], vec![false; n]);
+    let (mut hours, mut money, mut buy_share) = (vec![0.0; n], vec![0.0; n], vec![0.0f32; n]);
     let mut wage = 0.0;
     let current = job;
     let mut job = None;
@@ -113,17 +114,17 @@ pub fn plan_routes(
         for &g in &catalog.build_order {
             let (mut h, mut m) = (direct[g], 0.0);
             for &(input, qty) in &catalog.goods[g].recipe.inputs {
-                if buy_input[input] {
-                    m += qty * market.prices[input];
-                    h += qty * market.trading_hours(input, wage);
-                } else {
-                    h += qty * hours[input];
-                    m += qty * money[input];
+                let share = buy_share[input];
+                if share > 0.0 {
+                    m += qty * share * market.prices[input];
+                    h += qty * share * market.trading_hours(input, wage);
                 }
+                h += qty * (1.0 - share) * hours[input];
+                m += qty * (1.0 - share) * money[input];
             }
             hours[g] = h;
             money[g] = m;
-            buy_input[g] = wage > 1e-6 && market.full_cost(g) < h * wage + m;
+            buy_share[g] = if wage > 1e-6 { share_bought(h * wage + m, market.full_cost(g)) } else { 0.0 };
         }
         let earning = |g: GoodId| (market.prices[g] - money[g]) / hours[g];
         let chosen = match (review, current.filter(|&j| earning(j) > 1e-6)) {
@@ -142,13 +143,13 @@ pub fn plan_routes(
         let mut flow = Flow::zero(n);
         flow.hours[g] = direct[g];
         for &(input, qty) in &catalog.goods[g].recipe.inputs {
-            if buy_input[input] {
-                flow.bought[input] += qty;
-                flow.trading += qty * market.trading_hours(input, wage);
-            } else {
-                let sub = make[input].clone();
-                flow.add(&sub, qty);
+            let share = buy_share[input];
+            if share > 0.0 {
+                flow.bought[input] += qty * share;
+                flow.trading += qty * share * market.trading_hours(input, wage);
             }
+            let sub = make[input].clone();
+            flow.add(&sub, qty * (1.0 - share));
         }
         make[g] = flow;
     }
@@ -188,14 +189,25 @@ pub fn plan_routes(
             e
         });
         flows.push(match (made, bought) {
-            (Some(m), Some(b)) if b.total_hours() < m.total_hours() => b,
-            (Some(m), _) => m,
+            (Some(m), Some(b)) => {
+                let share = share_bought(m.total_hours(), b.total_hours());
+                let mut mix = Flow::zero(n);
+                mix.add(&m, 1.0 - share);
+                mix.add(&b, share);
+                mix
+            }
+            (Some(m), None) => m,
             (None, Some(b)) => b,
             (None, None) => unavailable(g),
         });
     }
     let unit_hours = flows.iter().map(Flow::total_hours).collect();
     Routes { flows, unit_hours, wage, job }
+}
+
+fn share_bought(make: f32, buy: f32) -> f32 {
+    let scale = BUY_SPREAD * make.min(buy).max(1e-6);
+    1.0 / (1.0 + ((buy - make) / scale).clamp(-30.0, 30.0).exp())
 }
 
 fn choose_job(earning: &dyn Fn(GoodId) -> f32, n: usize, draw: f32) -> Option<GoodId> {

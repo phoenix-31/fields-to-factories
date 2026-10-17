@@ -1,7 +1,7 @@
 // What people need and like. Each value is fixed, like 1.0, or a range, like (0.8, 1.2),
 // that every person draws their own value from.
 //
-// needs         amounts of a characteristic needed per day, met before anything else
+// needs         amounts of a characteristic needed per day, met before anything else, in order
 // preferences   how much people enjoy each characteristic beyond what they need:
 //                 Log(weight)               always wanted, each extra unit worth a bit less
 //                 Saturating(weight, scale) wanted until about `scale` extra, then barely
@@ -19,9 +19,11 @@
     discount_rate: 0.05,
     needs: [
         (of: "nourishment", amount: (0.9, 1.1)),
+        (of: "warmth", amount: (0.2, 0.3)),
     ],
     preferences: [
         (of: "nourishment", curve: Saturating(weight: 1.5, scale: 1.0)),
+        (of: "warmth", curve: Saturating(weight: (0.4, 0.8), scale: 0.5)),
         (of: "comfort", curve: Log(weight: (0.8, 1.2))),
     ],
 )
