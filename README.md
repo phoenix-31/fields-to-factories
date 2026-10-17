@@ -15,7 +15,7 @@ hours farming ≈ nourishment needed ÷ (food per hour × tool boost)
 
 The need doesn't grow, so every gain in farm productivity frees hours for everything else. Better ploughs raise the tool boost, but an iron plough sits at the end of a chain: wood → charcoal, plus ore → iron, then iron + wood → plough. Trade lets each person take part in that chain at whichever step suits their land, forest and ore.
 
-![Year 90](screenshot.png)
+![Year 92](screenshot.png)
 
 ## Run
 
