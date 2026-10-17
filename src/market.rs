@@ -1,4 +1,5 @@
-//! The marketplace: prices, the time it takes to trade, and how each person decides to make or buy.
+//! Market towns: local prices, the time it takes to trade and carry goods, merchants shipping
+//! between towns, and how each person decides to make or buy.
 
 use bevy::prelude::*;
 
@@ -9,51 +10,107 @@ const JOB_SPREAD: f32 = 0.1;
 const BUY_SPREAD: f32 = 0.1;
 const ROUTE_PASSES: usize = 4;
 
-#[derive(Resource, Clone)]
-pub struct Market {
+pub struct Town {
+    pub name: String,
+    pub at: (f32, f32),
     pub prices: Vec<f32>,
-    pub trade_cost: f32,
     pub bought: Vec<f32>,
     pub sold: Vec<f32>,
+    pub imported: Vec<f32>,
 }
 
-impl Market {
-    pub fn new(prices: Vec<f32>, trade_cost: f32) -> Self {
-        let n = prices.len();
-        Self { prices, trade_cost, bought: vec![0.0; n], sold: vec![0.0; n] }
+#[derive(Resource)]
+pub struct Markets {
+    pub towns: Vec<Town>,
+    pub trade_cost: f32,
+    pub travel_cost: f32,
+    pub carried: f32,
+}
+
+pub struct Access<'a> {
+    pub prices: &'a [f32],
+    pub trade_cost: f32,
+    pub carrying: Vec<f32>,
+}
+
+impl Access<'_> {
+    fn trading_hours(&self, good: GoodId, wage: f32) -> f32 {
+        self.trade_cost * self.prices[good] / wage + self.carrying[good]
     }
 
-    fn trading_hours(&self, good: GoodId, wage: f32) -> f32 {
-        self.trade_cost * self.prices[good] / wage
+    fn full_cost(&self, good: GoodId, wage: f32) -> f32 {
+        self.prices[good] * (1.0 + self.trade_cost) + self.carrying[good] * wage
+    }
+}
+
+impl Markets {
+    pub fn access(&self, catalog: &Catalog, town: usize, distance: f32) -> Access<'_> {
+        Access {
+            prices: &self.towns[town].prices,
+            trade_cost: self.trade_cost,
+            carrying: catalog.goods.iter().map(|g| self.travel_cost * g.bulk * distance).collect(),
+        }
     }
 
     pub fn mismatch(&self) -> f32 {
         let (mut gap, mut volume) = (0.0, 0.0);
-        for ((b, s), p) in self.bought.iter().zip(&self.sold).zip(&self.prices) {
-            gap += (b - s).abs() * p;
-            volume += (b + s) * p;
+        for town in &self.towns {
+            for g in 0..town.prices.len() {
+                let (b, s, p) = (town.bought[g], town.sold[g] + town.imported[g], town.prices[g]);
+                gap += (b - s).abs() * p;
+                volume += (town.bought[g] + town.sold[g]) * p;
+            }
         }
         if volume > 1e-6 { gap / volume } else { 0.0 }
     }
 
-    fn full_cost(&self, good: GoodId) -> f32 {
-        self.prices[good] * (1.0 + self.trade_cost)
-    }
-
-    pub fn adjust(&mut self, bought: Vec<f32>, sold: Vec<f32>, mean_wage: f32) {
-        for g in 0..self.prices.len() {
-            let (b, s) = (bought[g], sold[g]);
-            if b + s > 1e-6 {
-                self.prices[g] *= (PRICE_SPEED * (b - s) / (b + s)).exp();
+    pub fn clear(&mut self, catalog: &Catalog, bought: Vec<Vec<f32>>, sold: Vec<Vec<f32>>, mean_wage: f32) {
+        let n = catalog.len();
+        let towns = self.towns.len();
+        let mut excess: Vec<Vec<f32>> = (0..towns).map(|t| (0..n).map(|g| bought[t][g] - sold[t][g]).collect()).collect();
+        let mut imported = vec![vec![0.0; n]; towns];
+        self.carried = 0.0;
+        for g in 0..n {
+            loop {
+                let mut best: Option<(usize, usize, f32)> = None;
+                for from in (0..towns).filter(|&t| excess[t][g] < -1e-6) {
+                    for to in (0..towns).filter(|&t| excess[t][g] > 1e-6) {
+                        let carry = self.travel_cost
+                            * catalog.goods[g].bulk
+                            * crate::map::WorldMap::distance(self.towns[from].at, self.towns[to].at);
+                        let margin = self.towns[to].prices[g] - self.towns[from].prices[g] - carry;
+                        if margin > 0.0 && best.is_none_or(|b| margin > b.2) {
+                            best = Some((from, to, margin));
+                        }
+                    }
+                }
+                let Some((from, to, _)) = best else { break };
+                let qty = (-excess[from][g]).min(excess[to][g]);
+                excess[from][g] += qty;
+                excess[to][g] -= qty;
+                imported[from][g] -= qty;
+                imported[to][g] += qty;
+                self.carried += qty * self.towns[to].prices[g];
             }
+        }
+        for (t, town) in self.towns.iter_mut().enumerate() {
+            for g in 0..n {
+                let volume = bought[t][g] + sold[t][g];
+                if volume > 1e-6 {
+                    town.prices[g] *= (PRICE_SPEED * excess[t][g] / volume).clamp(-1.0, 1.0).exp();
+                }
+            }
+            town.bought = bought[t].clone();
+            town.sold = sold[t].clone();
+            town.imported = imported[t].clone();
         }
         if mean_wage > 1e-6 {
-            for price in &mut self.prices {
-                *price /= mean_wage;
+            for town in &mut self.towns {
+                for price in &mut town.prices {
+                    *price /= mean_wage;
+                }
             }
         }
-        self.bought = bought;
-        self.sold = sold;
     }
 }
 
@@ -97,7 +154,7 @@ pub struct Routes {
 
 pub fn plan_routes(
     catalog: &Catalog,
-    market: &Market,
+    market: &Access,
     endowments: &[f32],
     owned: &[f32],
     job: Option<GoodId>,
@@ -124,9 +181,9 @@ pub fn plan_routes(
             }
             hours[g] = h;
             money[g] = m;
-            buy_share[g] = if wage > 1e-6 { share_bought(h * wage + m, market.full_cost(g)) } else { 0.0 };
+            buy_share[g] = if wage > 1e-6 { share_bought(h * wage + m, market.full_cost(g, wage)) } else { 0.0 };
         }
-        let earning = |g: GoodId| (market.prices[g] - money[g]) / hours[g];
+        let earning = |g: GoodId| (market.prices[g] - money[g]) / (hours[g] + market.carrying[g]);
         let chosen = match (review, current.filter(|&j| earning(j) > 1e-6)) {
             (None, Some(j)) => Some(j),
             (None, None) if current.is_none() => None,
@@ -162,6 +219,7 @@ pub fn plan_routes(
         }
         let mut flow = make[j].clone();
         flow.sold[j] += 1.0;
+        flow.trading += market.carrying[j];
         let mut scaled = Flow::zero(n);
         scaled.add(&flow, amount / net);
         Some(scaled)

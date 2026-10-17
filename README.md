@@ -1,9 +1,10 @@
 # Fields to Factories
 
-500 people each split a 16-hour waking day across the goods in an economy, trading at a shared market, plus leisure. Two data files define the world:
+500 people live on a 25 × 20 map. Each splits a 16-hour waking day across the goods in an economy, trading at the nearest market town, plus leisure. Three data files define the world:
 
-- [`goods.ron`](goods.ron) holds facts about goods: what each one **provides** (food provides nourishment, clothing provides warmth, furniture provides comfort), how it's made, and how fast its recipe improves. Raw flax, wood and ore feed chains up to clothing, furniture and ploughs.
-- [`people.ron`](people.ron) holds what people **want and have**: needs, tastes, and how good their land, forest and ore deposits are. Each person draws their own values from the ranges given.
+- [`goods.ron`](goods.ron) holds facts about goods: what each one **provides** (food provides nourishment, clothing provides warmth, furniture provides comfort), how it's made, how fast its recipe improves, and how bulky it is to carry. Raw wool, wood and ore feed chains up to clothing, furniture and ploughs.
+- [`people.ron`](people.ron) holds what people **want**: needs and tastes, drawn per person from ranges, plus the range of quality for each resource.
+- [`map.ron`](map.ron) holds the **geography**: terrain that decides where land, pasture, forest and ore are good, the market towns, and the cost of carrying goods.
 
 People work out for themselves what any good is worth to them, including tools, which provide nothing directly but save hours. Every good can be made or bought, whichever costs that person fewer hours, so people with good land end up farming for others and people near rich ore end up mining.
 
@@ -13,16 +14,17 @@ Nothing is scripted. The shift out of farming comes from one relationship:
 hours farming ≈ nourishment needed ÷ (food per hour × tool boost)
 ```
 
-The need doesn't grow, so every gain in farm productivity frees hours for everything else. Better ploughs raise the tool boost, but an iron plough sits at the end of a chain: wood → charcoal, plus ore → iron, then iron + wood → plough. Trade lets each person take part in that chain at whichever step suits their land, forest and ore.
+The need doesn't grow, so every gain in farm productivity frees hours for everything else. Better ploughs raise the tool boost, but an iron plough sits at the end of a chain: wood → charcoal, plus ore → iron, then iron + wood → plough. Trade lets each person take part in that chain at whichever step suits their land, forest and ore, as long as the trip to market is worth it.
 
-![Year 92](screenshot.png)
+![Main-work map at year 98: farming in the valley, textiles in the western hills, carpentry on the forested slopes](screenshot.png)
 
 ## Run
 
 ```sh
 cargo run --release                                   # interactive window
 cargo run --release -- --headless 300                 # 300 years as CSV on stdout
-cargo run --release -- --goods g.ron --people p.ron   # use other definitions
+cargo run --release -- --goods g.ron --people p.ron   # use other definitions (also --map)
+cargo run --release -- --show-map                     # print the terrain and towns as text
 cargo run --release -- --trade-cost 3 --headless 300  # start with a different trade cost
 ```
 
@@ -36,17 +38,20 @@ The first build compiles Bevy and takes several minutes. On Linux you also need 
 4. **Tools are whole and wear out at random.** A new tool lasts a number of years drawn from its `lifetime` range, then breaks and must be replaced. Hours put towards a tool build up as progress (or savings, if buying) until there's a whole one. A farmer works with the best tool they own, so an iron plough makes a wooden one pointless.
 5. **Make or buy.** For each good, and each input, a person compares making it with earning the money at their job and buying it. Buying also costs time at market: the trade cost, a share of the price. Hours spent making inputs count in those sectors, and hours spent earning count in the job's sectors.
 6. **Gradual choices.** The cheaper buying is compared with making, the larger the share of a good a person buys, rather than everyone flipping at once.
-7. **Jobs.** A person's job is the good they make to sell; their wage is what an hour of it earns after paying for bought inputs. People start out self-sufficient. Each year about one in five reviews their job and picks one, where better-paying jobs are more likely but not certain.
+7. **Distance.** Everyone trades at their nearest town. Buyers carry goods home and sellers carry goods to market, each costing `travel_cost` × the good's `bulk` × the distance in hours. Far from town, buying and selling cost more, so people make more for themselves.
+8. **Jobs.** A person's job is the good they make to sell; their wage is what an hour of it earns after paying for bought inputs. People start out self-sufficient. Each year about one in five reviews their job and picks one, where better-paying jobs are more likely but not certain.
 
-## The market
+## Markets and towns
 
-All trade goes through one marketplace. Prices are measured in **hours of an average person's work**, so an iron plough "costs 22 hours". Each year, a good's price rises if more was bought than sold, and falls if the opposite. Buyers pay the price plus time at market; sellers get the price.
+Each town has its own prices, measured in **hours of an average person's work**, so an iron plough "costs 19 hours". Each year, a good's price in a town rises if more was bought there than sold, and falls if the opposite. Buyers pay the price plus time at market and carrying; sellers get the price, minus their own carrying time.
 
-The market doesn't clear exactly. Once it has formed, about 4–5% of trade by value finds no counterpart in a given year: merchants absorb the gap, and prices move to close it. The panel shows this as "unmatched". In the first 10 years, while people are still joining, most trade is unmatched.
+**Merchants** link the towns. When one town has surplus and another a shortage, and the price gap is bigger than the cost of carrying the good between them, merchants ship it. Merchants' own time isn't yet counted in anyone's day.
+
+The markets don't clear exactly. Once they've formed, about 8–9% of trade by value finds no counterpart in a given year (four markets of about 125 people are lumpier than one of 500). Merchants absorb the gap, and prices move to close it. The panel shows this as "unmatched". In the first 10 years, while people are still joining, most trade is unmatched.
 
 ## The definitions
 
-Edit either file and press **Reset** in the app to reload both without recompiling. Reset also redraws everyone.
+Edit any of them and press **Reset** in the app to reload all three without recompiling. Reset also redraws everyone.
 
 **`goods.ron`**: one entry per good.
 
@@ -59,61 +64,75 @@ Edit either file and press **Reset** in the app to reload both without recompili
 | `recipe.inputs` | Goods used up per unit, e.g. `[("iron", 2.0), ("wood", 2.0)]` |
 | `recipe.tools` | Tools that multiply this recipe's output; a person works with the best one they own |
 | `lifetime` | Makes the good a tool: the years it lasts before breaking, drawn from the range, e.g. `(15.0, 35.0)` |
+| `bulk` | How hard one unit is to carry, relative to food (default 1). Ore is 2, cloth 0.3 |
 
 **`people.ron`**: values are fixed (`1.0`) or a range (`(0.8, 1.2)`) that each person draws from.
 
 | Field | Meaning |
 |---|---|
-| `endowments` | Quality of each resource (`land`, `forest`, `ore`) a person has access to; must be above zero |
+| `endowments` | Range of quality for each resource (`land`, `pasture`, `forest`, `ore`); where in the range a person falls depends on the terrain where they live. Must be above zero |
 | `needs` | Amount of a characteristic needed per day; met before anything else, in the order listed (nourishment, then warmth) |
 | `preferences` | Enjoyment beyond the need: `Log(weight)` is always wanted at a falling rate; `Saturating(weight, scale)` is wanted until about `scale` extra |
 | `leisure` | Weight on free time |
 | `discount_rate` | How much less next year matters; with wear, sets how far ahead tools are valued |
 
-The loaders reject unknown goods, duplicate names, tools without a lifetime (or one under a year) or with a multiplier below 1, recipes that are inputs to themselves, wants no good provides, and resources with no endowment.
+**`map.ron`**: run with `--show-map` to see the terrain and where towns sit.
+
+| Field | Meaning |
+|---|---|
+| `seed`, `feature_size` | Which terrain to generate, and roughly how many cells wide its hills and valleys are |
+| `terrain` | Where each resource is best: `Low` (valleys), `Middle` (slopes), `High` (hills) or `Anywhere` |
+| `towns` | Market towns, by name and `(column, row)` from the top-left |
+| `travel_cost` | Hours to carry one unit of bulk one cell |
+
+The loaders reject unknown goods, duplicate names, tools without a lifetime (or one under a year) or with a multiplier below 1, recipes that are inputs to themselves, wants no good provides, resources with no endowment, towns off the map, and terrain for resources no recipe uses.
 
 ## The panel
 
 - **Technology improves, at N×:** multiplies every recipe's `improves` rate. 0× freezes technology; 2× doubles every rate of progress.
 - **Trade cost:** time spent trading, as a share of the price. Drag it to 0% for free trade, or 200% to make trade pointless.
-- **Production tree:** raw materials on the left, what people consume on the right. Solid arrows are inputs, dashed arrows are tools, and each node shows its share of all waking hours and its price.
+- **Carrying cost:** hours to carry one unit of bulk one cell. Raise it and trade shrinks towards the towns.
+- **Map shows:** each person's day as a bar (the ground round it shows terrain: yellow-green valleys, dark green forest, grey hills), or each person's **main work** as a coloured square, which reads like a land-use map.
+- **Town table:** people, average wage, main work and food price for each town. Pick a town to show its prices in the production tree.
+- **Production tree:** raw materials on the left, what people consume on the right. Solid arrows are inputs, dashed arrows are tools, and each node shows its share of all waking hours and its price in the chosen town.
 - **Chart:** share of waking hours by sector, stacked to 100% with trading and leisure on top, plus a line per tool showing the share of people who own one, and a dashed line for specialisation.
 - **Production rates and tools** (collapsed): a slider for every recipe rate and tool multiplier.
 
 ## Things to try
 
-- **Watch the grid specialise.** Bars start as a mix of everything and sort into farmers (green), carpenters (orange), weavers and tailors (coral and pink), and a few foresters, miners and smiths.
-- **Watch where freed time goes.** Farming shrinks, and so does weaving, which improves fastest (2% a year). Tailoring and carpentry improve slowly (0.5%), so they hold on to workers or grow: carpentry rises to about a third of the day by year 200. This is **Baumol's cost disease**: labour moves into the sectors whose productivity *doesn't* rise. Try giving carpentry `improves: 0.02` and see the hours go to leisure instead.
-- **Change the trade cost and compare.** At year 100, compared with no trade:
+- **Switch the map to "main work".** By year 100 the fertile valley round Rivermouth farms, the sheep hills round Westmoor have become a textile district (wool, cloth, tailoring), and carpenters cluster on the forested slopes near their wood. Nothing places them; it's where their resources are.
+- **Compare food prices in the town table.** At year 100 food costs about 1.3 hours of work in valley Rivermouth and about 1.9 in the hill towns: the price of carrying it uphill.
+- **Watch the hills go hungry, then recover.** Hill farmland is poor, so 42% of people start out unable to meet their needs. Trade lets them sell wool, wood or furniture and buy food:
 
-  | At year 100 | Cheap trade (5%) | Default (30%) | No trade (300%) |
+  | Needs unmet | Year 10 | Year 20 | Year 30 |
   |---|---|---|---|
-  | Farming | 20% of the day | 20% | 32% |
-  | Leisure | 31% | 29% | 28% |
-  | Specialisation | 78% | 64% | 46% |
+  | Cheap trade (5%) | 20% | 2% | 0% |
+  | Default (30%) | 25% | 4% | 0% |
+  | No trade (300%) | 25% | 13% | 8% |
 
-  These are the gains from trade: people with good land farm for everyone, and everyone gets more free time. Specialisation counts the share of a person's work in their main sector; many people buy part of a good and make the rest, so it stays well below 100%.
+- **Raise the carrying cost.** Trade shrinks, prices drift further apart between towns, and the regions become more self-sufficient.
+- **Move or add a town in `map.ron`,** then press Reset. Put one deep in the western hills and see whether the textile district moves with it.
+- **Watch where freed time goes.** Farming shrinks, and so does weaving, which improves fastest (2% a year). Tailoring and carpentry improve slowly (0.5%), so they hold on to workers or grow. This is **Baumol's cost disease**: labour moves into the sectors whose productivity *doesn't* rise.
 - **Watch years 2–10.** Cheap wooden ploughs spread first, then iron ploughs take over as a mining, charcoal and smelting chain forms.
-- **Watch for an echo.** Iron-plough ownership peaks around year 20, then dips as that whole cohort of ploughs wears out at once, then recovers more smoothly.
-- **Cause a shortage.** Open "Production rates and tools" and drag "ore per hour" down. Iron's price rises, iron ploughs disappear, and farming takes longer.
-- **Add a second source of nourishment,** for example fish with `provides: [("nourishment", 1.0)]` and `recipe: (rate: 0.1)`, then press Reset. Nothing in the code knows fish and food are alternatives; they both provide nourishment.
-- **Export CSV** writes `history.csv` with each good's rate and price, each sector's share of hours, trading time, specialisation, unmatched trade and tool ownership.
+- **Export CSV** writes `history.csv` with each good's rate and its price in every town, each sector's share of hours overall and in every town, trading time, specialisation, trade carried between towns, unmatched trade and tool ownership.
 
 ## Layout
 
 | File | Contents |
 |---|---|
 | `goods.ron` | Every good: what it provides and how it's made |
-| `people.ron` | What people need, enjoy and have access to, as ranges |
+| `people.ron` | What people need and enjoy, and the range of each resource's quality |
+| `map.ron` | Terrain, market towns and carrying cost |
 | `src/goods.rs` | Loads and validates the catalog; computes rates, tool boosts and embodied hours |
 | `src/people.rs` | Loads and validates the population definition; tastes and their curves |
-| `src/market.rs` | Prices, the trade cost, and each person's make-or-buy routes and job choice |
-| `src/sim.rs` | People as ECS components (`Endowments`, `Needs`, `Tastes`, `Tools`, `Job`, `Trades`, …), and the `SimTick` schedule: advance technology → plan each day → replace tools → clear the market → record history |
-| `src/ui.rs` | People grid (each person a bar of their day), control panel, production tree and stacked chart |
+| `src/map.rs` | Loads the map, generates terrain and finds each spot's nearest town |
+| `src/market.rs` | Each town's prices, merchants between towns, and each person's make-or-buy routes and job choice |
+| `src/sim.rs` | People as ECS components (`Home`, `Endowments`, `Needs`, `Tastes`, `Tools`, `Job`, `Trades`, …), and the `SimTick` schedule: advance technology → plan each day → replace tools → clear the market → record history |
+| `src/ui.rs` | The map (terrain, towns, and each person's day or main work), control panel, town table, production tree and stacked chart |
 | `src/main.rs` | Windowed or headless entry point |
 
 See [CHANGELOG.md](CHANGELOG.md) for what each stage added.
 
-## Next: stage 5
+## Next: stage 6
 
-Distance. Right now everyone trades at one marketplace for the same cost. If the trade cost grew with distance on the grid, markets would become local: towns could form where good land and ore sit close together, and a far-off village could stay self-sufficient. That would also let the grid stand for a map.
+Who gains? Wages already differ a lot between people and places. Tracking each person's consumption and leisure would show whether trade and technology spread gains evenly, or whether the best-endowed places pull ahead, and what happens to the remote and the poor.

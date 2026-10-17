@@ -1,5 +1,26 @@
 # Changelog
 
+## Stage 5: distance
+
+### Added
+- **A map.** People live at fixed spots on a 25 × 20 grid. A new `map.ron` generates smooth terrain: land is best in valleys, pasture and ore on hills, forest on the slopes between. Each person's resources depend on where they live. `--show-map` prints it as text.
+- **Market towns.** Four towns, each with its own prices. Everyone trades at their nearest town.
+- **Carrying costs.** Each good has a `bulk`; buyers carry goods home and sellers carry them to market, at `travel_cost` × bulk × distance hours.
+- **Merchants** ship goods between towns when the price gap exceeds the cost of carrying them.
+- **Panel.** A carrying-cost slider, a town table (people, wage, main work, food price), a choice of which town's prices the tree shows, and a "main work" map view. The map shows terrain round each bar and the towns as labelled diamonds.
+- **CSV.** Each good's price in every town, each sector's share of hours in every town, and the share of trade carried between towns.
+
+### Changed
+- **Flax became wool,** grown on upland `pasture`, a new resource, so the hills have something to sell.
+- **Resource ranges are wider:** land 0.3–1.7, pasture 0.3–1.7, forest 0.4–1.6, ore 0.1–1.6, so geography matters.
+- People are no longer sorted by endowment on the grid; their position is their place on the map.
+
+### Results
+- **Regions specialise.** By year 100 the valley farms, the western hills round Westmoor turn to wool, cloth and tailoring, and carpenters cluster on forested slopes.
+- **Prices differ by place.** At year 100, food costs about 1.3 hours of work in the valley town against about 1.9 in hill towns.
+- **Trade feeds the hills.** 42% of people start unable to meet their needs, mostly on poor hill farmland. By year 20, 4% still can't with trade, against 13% without.
+- **Unmatched trade rose** to about 8–9% a year, from 4–5% with one market: four smaller markets are lumpier. Little trade (1–3%) moves between towns at the default carrying cost.
+
 ## Stage 4.1: real goods for freed time
 
 ### Changed

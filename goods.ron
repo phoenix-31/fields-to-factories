@@ -8,6 +8,7 @@
 //   inputs      goods used up per unit made, e.g. [("wood", 2.0)]
 //   tools       tools that multiply this recipe's rate; a person works with the best one they own
 // lifetime      makes the good a tool: years it lasts before it breaks, drawn from the range
+// bulk          how hard one unit is to carry, relative to food (default 1); see travel_cost in map.ron
 
 #![enable(implicit_some)]
 [
@@ -27,20 +28,23 @@
         ),
     ),
     (
-        name: "flax",
-        sector: "flax-growing",
+        name: "wool",
+        sector: "sheep-herding",
+        bulk: 0.5,
         color: (205, 205, 110),
-        recipe: (rate: 2.0, uses: "land", improves: 0.01),
+        recipe: (rate: 2.0, uses: "pasture", improves: 0.01),
     ),
     (
         name: "cloth",
         sector: "spinning & weaving",
+        bulk: 0.3,
         color: (240, 120, 90),
-        recipe: (rate: 0.5, inputs: [("flax", 2.0)], improves: 0.02),
+        recipe: (rate: 0.5, inputs: [("wool", 2.0)], improves: 0.02),
     ),
     (
         name: "clothing",
         sector: "tailoring",
+        bulk: 0.2,
         color: (245, 175, 200),
         provides: [("warmth", 1.0)],
         recipe: (rate: 1.0, inputs: [("cloth", 1.0)], improves: 0.005),
@@ -48,6 +52,7 @@
     (
         name: "furniture",
         sector: "carpentry",
+        bulk: 1.0,
         color: (230, 158, 52),
         provides: [("comfort", 1.0)],
         recipe: (rate: 1.0, inputs: [("wood", 0.5)], improves: 0.005),
@@ -55,30 +60,35 @@
     (
         name: "wood",
         sector: "forestry",
+        bulk: 1.5,
         color: (140, 98, 57),
         recipe: (rate: 2.0, uses: "forest", improves: 0.005),
     ),
     (
         name: "charcoal",
         sector: "charcoal-burning",
+        bulk: 0.6,
         color: (96, 96, 104),
         recipe: (rate: 1.0, inputs: [("wood", 3.0)]),
     ),
     (
         name: "ore",
         sector: "mining",
+        bulk: 2.0,
         color: (128, 146, 170),
         recipe: (rate: 0.5, uses: "ore", improves: 0.005),
     ),
     (
         name: "iron",
         sector: "smelting",
+        bulk: 0.5,
         color: (200, 80, 120),
         recipe: (rate: 0.5, inputs: [("ore", 2.0), ("charcoal", 2.0)], improves: 0.01),
     ),
     (
         name: "wooden plough",
         sector: "wooden plough-making",
+        bulk: 1.0,
         color: (214, 190, 140),
         recipe: (rate: 0.25, inputs: [("wood", 2.0)]),
         lifetime: (3.0, 8.0),
@@ -86,6 +96,7 @@
     (
         name: "iron plough",
         sector: "iron plough-making",
+        bulk: 1.0,
         color: (176, 112, 214),
         recipe: (rate: 0.1, inputs: [("iron", 2.0), ("wood", 2.0)]),
         lifetime: (15.0, 35.0),

@@ -35,6 +35,7 @@ pub struct Good {
     pub provides: Vec<(CharId, f32)>,
     pub recipe: Recipe,
     pub lifetime: Option<Spread>,
+    pub bulk: f32,
 }
 
 impl Good {
@@ -61,6 +62,12 @@ struct GoodDef {
     recipe: RecipeDef,
     #[serde(default)]
     lifetime: Option<Spread>,
+    #[serde(default = "default_bulk")]
+    bulk: f32,
+}
+
+fn default_bulk() -> f32 {
+    1.0
 }
 
 #[derive(Deserialize)]
@@ -109,6 +116,9 @@ impl Catalog {
         for def in &defs {
             if def.recipe.rate <= 0.0 {
                 return Err(format!("\"{}\" needs a positive rate", def.name));
+            }
+            if def.bulk < 0.0 {
+                return Err(format!("\"{}\" can't have negative bulk", def.name));
             }
             if def.recipe.improves < 0.0 {
                 return Err(format!("\"{}\" can't improve by a negative amount", def.name));
@@ -164,6 +174,7 @@ impl Catalog {
                     tools,
                 },
                 lifetime: def.lifetime,
+                bulk: def.bulk,
             });
         }
 

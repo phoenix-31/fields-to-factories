@@ -9,16 +9,16 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 
 use crate::goods::{Catalog, CharId, GoodId};
-use crate::market::{Market, Routes, autarky_prices, plan_routes};
+use crate::map::{self, WorldMap};
+use crate::market::{Markets, Routes, Town, autarky_prices, plan_routes};
 use crate::people::{Curve, Population, Taste};
 
 pub const WAKING_HOURS: f32 = 16.0;
 const SLICE: f32 = 0.25;
 const SLICES: usize = (WAKING_HOURS / SLICE) as usize;
 
-pub const POPULATION_COLS: usize = 25;
-pub const POPULATION_ROWS: usize = 20;
-const POPULATION: usize = POPULATION_COLS * POPULATION_ROWS;
+pub const POPULATION_COLS: usize = map::COLS;
+pub const POPULATION_ROWS: usize = map::ROWS;
 
 const INITIAL_HOUR_VALUE: f32 = 0.3;
 pub const DEFAULT_TRADE_COST: f32 = 0.3;
@@ -31,7 +31,14 @@ pub struct SimTick;
 
 #[derive(Component)]
 pub struct Person {
-    pub rank: usize,
+    pub col: usize,
+    pub row: usize,
+}
+
+#[derive(Component)]
+pub struct Home {
+    pub town: usize,
+    pub distance: f32,
 }
 
 #[derive(Component)]
@@ -109,6 +116,7 @@ impl Default for Economy {
 pub struct Definitions {
     pub goods_path: PathBuf,
     pub people_path: PathBuf,
+    pub map_path: PathBuf,
     pub version: u32,
     pub error: Option<String>,
 }
@@ -122,14 +130,16 @@ pub struct Clock {
 pub struct Sample {
     pub year: u32,
     pub rates: Vec<f32>,
-    pub prices: Vec<f32>,
+    pub prices: Vec<Vec<f32>>,
     pub shares: Vec<f32>,
+    pub town_shares: Vec<Vec<f32>>,
     pub trading_share: f32,
     pub leisure_share: f32,
     pub hungry_share: f32,
     pub coverage: Vec<f32>,
     pub specialisation: f32,
     pub traded: f32,
+    pub carried: f32,
     pub mismatch: f32,
 }
 
@@ -158,8 +168,10 @@ impl Rng {
 pub struct SimPlugin {
     pub catalog: Catalog,
     pub population: Population,
+    pub map: WorldMap,
     pub goods_path: PathBuf,
     pub people_path: PathBuf,
+    pub map_path: PathBuf,
     pub trade_cost: f32,
 }
 
@@ -167,13 +179,20 @@ impl Plugin for SimPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.catalog.clone())
             .insert_resource(self.population.clone())
+            .insert_resource(self.map.clone())
             .insert_resource(Definitions {
                 goods_path: self.goods_path.clone(),
                 people_path: self.people_path.clone(),
+                map_path: self.map_path.clone(),
                 version: 0,
                 error: None,
             })
-            .insert_resource(Market::new(vec![1.0; self.catalog.len()], self.trade_cost))
+            .insert_resource(Markets {
+                towns: Vec::new(),
+                trade_cost: self.trade_cost,
+                travel_cost: self.map.travel_cost,
+                carried: 0.0,
+            })
             .init_resource::<Economy>()
             .init_resource::<Clock>()
             .init_resource::<History>()
@@ -191,10 +210,18 @@ fn spawn_people(
     mut rng: ResMut<WorldRng>,
     catalog: Res<Catalog>,
     population: Res<Population>,
+    world_map: Res<WorldMap>,
 ) {
-    let mut people: Vec<_> = (0..POPULATION)
-        .map(|_| {
-            let endowments: Vec<f32> = population.endowments.iter().map(|e| e.draw(rng.0.next_f32())).collect();
+    let n = catalog.len();
+    for row in 0..POPULATION_ROWS {
+        for col in 0..POPULATION_COLS {
+            let spot = row * POPULATION_COLS + col;
+            let endowments: Vec<f32> = population
+                .endowments
+                .iter()
+                .zip(&world_map.fields)
+                .map(|(spread, field)| spread.draw(field[spot]))
+                .collect();
             let needs: Vec<(CharId, f32)> = population
                 .needs
                 .iter()
@@ -214,36 +241,45 @@ fn spawn_people(
                 })
                 .collect();
             let leisure = population.leisure.draw(rng.0.next_f32());
-            (endowments, needs, Tastes { preferences, leisure })
-        })
-        .collect();
-    let ease = |p: &(Vec<f32>, Vec<(CharId, f32)>, Tastes)| {
-        p.0.iter().sum::<f32>() / p.1.iter().map(|n| n.1).sum::<f32>().max(1e-6)
-    };
-    people.sort_by(|a, b| ease(b).total_cmp(&ease(a)));
-
-    let n = catalog.len();
-    for (rank, (endowments, needs, tastes)) in people.into_iter().enumerate() {
-        commands.spawn((
-            Person { rank },
-            Endowments(endowments),
-            Needs(needs),
-            tastes,
-            Tools::new(n),
-            Trades { bought: vec![0.0; n], sold: vec![0.0; n] },
-            Wage::default(),
-            Job::default(),
-            TimeUse::new(n),
-            NeedsMet::default(),
-            HourValue(INITIAL_HOUR_VALUE),
-            PersonRng(Rng(SEED ^ (rank as u64).wrapping_mul(0xA24B_AED4_963E_E407))),
-        ));
+            let (town, distance) = world_map.nearest_town((col as f32, row as f32));
+            commands.spawn((
+                (Person { col, row }, Home { town, distance }, Endowments(endowments), Needs(needs)),
+                Tastes { preferences, leisure },
+                Tools::new(n),
+                Trades { bought: vec![0.0; n], sold: vec![0.0; n] },
+                Wage::default(),
+                Job::default(),
+                TimeUse::new(n),
+                NeedsMet::default(),
+                HourValue(INITIAL_HOUR_VALUE),
+                PersonRng(Rng(SEED ^ (spot as u64).wrapping_mul(0xA24B_AED4_963E_E407))),
+            ));
+        }
     }
 }
 
-fn open_market(mut market: ResMut<Market>, catalog: Res<Catalog>, people: Query<&Endowments>) {
-    let endowments: Vec<Vec<f32>> = people.iter().map(|e| e.0.clone()).collect();
-    *market = Market::new(autarky_prices(&catalog, &endowments), market.trade_cost);
+fn open_market(
+    mut markets: ResMut<Markets>,
+    catalog: Res<Catalog>,
+    world_map: Res<WorldMap>,
+    people: Query<(&Endowments, &Home)>,
+) {
+    let n = catalog.len();
+    markets.travel_cost = world_map.travel_cost;
+    markets.towns = (0..world_map.towns.len())
+        .map(|t| {
+            let local: Vec<Vec<f32>> = people.iter().filter(|(_, h)| h.town == t).map(|(e, _)| e.0.clone()).collect();
+            let all: Vec<Vec<f32>> = people.iter().map(|(e, _)| e.0.clone()).collect();
+            Town {
+                name: world_map.towns[t].name.clone(),
+                at: world_map.town_at(t),
+                prices: autarky_prices(&catalog, if local.is_empty() { &all } else { &local }),
+                bought: vec![0.0; n],
+                sold: vec![0.0; n],
+                imported: vec![0.0; n],
+            }
+        })
+        .collect();
 }
 
 fn advance_technology(mut catalog: ResMut<Catalog>, economy: Res<Economy>, mut clock: ResMut<Clock>) {
@@ -400,9 +436,10 @@ fn plan_day(p: &Situation) -> DayPlan {
 
 fn allocate_time(
     catalog: Res<Catalog>,
-    market: Res<Market>,
+    markets: Res<Markets>,
     population: Res<Population>,
     mut people: Query<(
+        &Home,
         &Endowments,
         &Needs,
         &Tastes,
@@ -418,6 +455,7 @@ fn allocate_time(
 ) {
     people.par_iter_mut().for_each(
         |(
+            home,
             endowments,
             needs,
             tastes,
@@ -432,7 +470,8 @@ fn allocate_time(
         )| {
             let owned = tools.owned();
             let review = (rng.0.next_f32() < JOB_REVIEW_CHANCE).then(|| rng.0.next_f32());
-            let routes = plan_routes(&catalog, &market, &endowments.0, &owned, job.0, review);
+            let access = markets.access(&catalog, home.town, home.distance);
+            let routes = plan_routes(&catalog, &access, &endowments.0, &owned, job.0, review);
             job.0 = routes.job;
             let plan = plan_day(&Situation {
                 catalog: &catalog,
@@ -474,35 +513,41 @@ fn replace_tools(catalog: Res<Catalog>, mut people: Query<(&mut Tools, &mut Pers
     }
 }
 
-fn clear_market(mut market: ResMut<Market>, catalog: Res<Catalog>, people: Query<(&Trades, &Wage)>) {
+fn clear_market(mut markets: ResMut<Markets>, catalog: Res<Catalog>, people: Query<(&Home, &Trades, &Wage)>) {
     let n = catalog.len();
-    let (mut bought, mut sold, mut wages, mut count) = (vec![0.0; n], vec![0.0; n], 0.0f32, 0.0f32);
-    for (trades, wage) in &people {
+    let towns = markets.towns.len();
+    let (mut bought, mut sold) = (vec![vec![0.0; n]; towns], vec![vec![0.0; n]; towns]);
+    let (mut wages, mut count) = (0.0f32, 0.0f32);
+    for (home, trades, wage) in &people {
         for g in 0..n {
-            bought[g] += trades.bought[g];
-            sold[g] += trades.sold[g];
+            bought[home.town][g] += trades.bought[g];
+            sold[home.town][g] += trades.sold[g];
         }
         if wage.0 > 0.0 {
             wages += wage.0;
             count += 1.0;
         }
     }
-    market.adjust(bought, sold, wages / count.max(1.0));
+    markets.clear(&catalog, bought, sold, wages / count.max(1.0));
 }
 
 fn record_history(
     clock: Res<Clock>,
     catalog: Res<Catalog>,
-    market: Res<Market>,
+    markets: Res<Markets>,
     mut history: ResMut<History>,
-    people: Query<(&TimeUse, &NeedsMet, &Tools)>,
+    people: Query<(&TimeUse, &NeedsMet, &Tools, &Home)>,
 ) {
     let goods = catalog.len();
+    let towns = markets.towns.len();
+    let (mut town_hours, mut town_people) = (vec![vec![0.0; goods]; towns], vec![0.0f32; towns]);
     let (mut hours, mut coverage) = (vec![0.0; goods], vec![0.0; goods]);
     let (mut trading, mut leisure, mut hungry, mut specialisation, mut n) = (0.0, 0.0, 0.0, 0.0, 0.0);
-    for (time, needs_met, tools) in &people {
+    for (time, needs_met, tools, home) in &people {
+        town_people[home.town] += 1.0;
         for good in 0..goods {
             hours[good] += time.hours[good];
+            town_hours[home.town][good] += time.hours[good];
             coverage[good] += if tools.years_left[good] > 0.0 { 1.0 } else { 0.0 };
         }
         let worked: f32 = time.hours.iter().sum();
@@ -518,33 +563,42 @@ fn record_history(
     }
     let total_hours = n * WAKING_HOURS;
     let worked_hours: f32 = hours.iter().sum();
-    let traded_hours: f32 = market.sold.iter().zip(&market.prices).map(|(s, p)| s * p).sum();
+    let traded_hours: f32 = markets
+        .towns
+        .iter()
+        .map(|t| t.sold.iter().zip(&t.prices).map(|(s, p)| s * p).sum::<f32>())
+        .sum();
     history.0.push(Sample {
         year: clock.year,
         rates: catalog.goods.iter().map(|g| g.recipe.rate).collect(),
-        prices: market.prices.clone(),
+        prices: markets.towns.iter().map(|t| t.prices.clone()).collect(),
         shares: hours.iter().map(|h| h / total_hours).collect(),
+        town_shares: town_hours
+            .iter()
+            .zip(&town_people)
+            .map(|(h, p)| h.iter().map(|x| x / (p * WAKING_HOURS).max(1e-6)).collect())
+            .collect(),
         trading_share: trading / total_hours,
         leisure_share: leisure / total_hours,
         hungry_share: hungry / n,
         coverage: coverage.iter().map(|c| c / n).collect(),
         specialisation: specialisation / n,
         traded: (traded_hours / worked_hours.max(1e-6)).min(1.0),
-        mismatch: market.mismatch(),
+        carried: markets.carried / traded_hours.max(1e-6),
+        mismatch: markets.mismatch(),
     });
 }
 
 pub fn reset(world: &mut World) {
-    let (goods_path, people_path) = {
+    let (goods_path, people_path, map_path) = {
         let defs = world.resource::<Definitions>();
-        (defs.goods_path.clone(), defs.people_path.clone())
+        (defs.goods_path.clone(), defs.people_path.clone(), defs.map_path.clone())
     };
-    let loaded = Catalog::load(&goods_path)
-        .and_then(|catalog| Population::load(&people_path, &catalog).map(|population| (catalog, population)));
-    match loaded {
-        Ok((catalog, population)) => {
+    match load_definitions(&goods_path, &people_path, &map_path) {
+        Ok((catalog, population, world_map)) => {
             world.insert_resource(catalog);
             world.insert_resource(population);
+            world.insert_resource(world_map);
             world.resource_mut::<Definitions>().error = None;
         }
         Err(e) => world.resource_mut::<Definitions>().error = Some(e),
@@ -564,8 +618,20 @@ pub fn reset(world: &mut World) {
     world.resource_mut::<History>().0.clear();
 }
 
+pub fn load_definitions(
+    goods: &std::path::Path,
+    people: &std::path::Path,
+    map: &std::path::Path,
+) -> Result<(Catalog, Population, WorldMap), String> {
+    let catalog = Catalog::load(goods)?;
+    let population = Population::load(people, &catalog)?;
+    let world_map = WorldMap::load(map, &catalog)?;
+    Ok((catalog, population, world_map))
+}
+
 pub fn write_csv(
     catalog: &Catalog,
+    towns: &[String],
     samples: &[Sample],
     out: &mut impl std::io::Write,
 ) -> std::io::Result<()> {
@@ -573,13 +639,23 @@ pub fn write_csv(
     for g in &catalog.goods {
         header.push(format!("{}_rate", g.name));
     }
-    for g in &catalog.goods {
-        header.push(format!("{}_price", g.name));
+    for town in towns {
+        for g in &catalog.goods {
+            header.push(format!("{town}: {}_price", g.name));
+        }
     }
     for g in &catalog.goods {
         header.push(format!("{}_share", g.sector));
     }
-    header.extend(["trading_share", "leisure_share", "hungry_share", "specialisation", "traded", "mismatch"].map(String::from));
+    for town in towns {
+        for g in &catalog.goods {
+            header.push(format!("{town}: {}_share", g.sector));
+        }
+    }
+    header.extend(
+        ["trading_share", "leisure_share", "hungry_share", "specialisation", "traded", "carried", "mismatch"]
+            .map(String::from),
+    );
     for g in catalog.goods.iter().filter(|g| g.is_tool()) {
         header.push(format!("{}_coverage", g.name));
     }
@@ -588,9 +664,10 @@ pub fn write_csv(
     for s in samples {
         let mut row = vec![s.year.to_string()];
         row.extend(s.rates.iter().map(|v| format!("{v:.4}")));
-        row.extend(s.prices.iter().map(|v| format!("{v:.4}")));
+        row.extend(s.prices.iter().flatten().map(|v| format!("{v:.4}")));
         row.extend(s.shares.iter().map(|v| format!("{v:.4}")));
-        for v in [s.trading_share, s.leisure_share, s.hungry_share, s.specialisation, s.traded, s.mismatch] {
+        row.extend(s.town_shares.iter().flatten().map(|v| format!("{v:.4}")));
+        for v in [s.trading_share, s.leisure_share, s.hungry_share, s.specialisation, s.traded, s.carried, s.mismatch] {
             row.push(format!("{v:.4}"));
         }
         for (good, def) in catalog.goods.iter().enumerate() {

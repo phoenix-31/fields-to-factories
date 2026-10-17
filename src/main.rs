@@ -1,8 +1,10 @@
 //! `cargo run --release` opens the window; `-- --headless 300` prints 300 years as CSV.
-//! `--goods <file>` and `--people <file>` pick the definitions (default `goods.ron`, `people.ron`);
-//! `--trade-cost <x>` sets the starting trade cost (0.3 = 30% of the price, paid in time).
+//! `--goods`, `--people` and `--map <file>` pick the definitions (default `goods.ron`, `people.ron`, `map.ron`);
+//! `--trade-cost <x>` sets the starting trade cost (0.3 = 30% of the price, paid in time);
+//! `--show-map` prints the terrain and towns as text.
 
 mod goods;
+mod map;
 mod market;
 mod people;
 mod sim;
@@ -14,7 +16,6 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 
 use goods::Catalog;
-use people::Population;
 use sim::{History, SimPlugin, SimTick};
 
 fn main() {
@@ -22,14 +23,17 @@ fn main() {
     let arg_after = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1));
     let goods_path = PathBuf::from(arg_after("--goods").map_or("goods.ron", |s| s.as_str()));
     let people_path = PathBuf::from(arg_after("--people").map_or("people.ron", |s| s.as_str()));
-    let loaded = Catalog::load(&goods_path)
-        .and_then(|catalog| Population::load(&people_path, &catalog).map(|population| (catalog, population)));
-    let (catalog, population) = loaded.unwrap_or_else(|e| {
+    let map_path = PathBuf::from(arg_after("--map").map_or("map.ron", |s| s.as_str()));
+    let (catalog, population, map) = sim::load_definitions(&goods_path, &people_path, &map_path).unwrap_or_else(|e| {
         eprintln!("{e}");
         std::process::exit(1);
     });
+    if args.iter().any(|a| a == "--show-map") {
+        print!("{}", map.render(&catalog));
+        return;
+    }
     let trade_cost = arg_after("--trade-cost").and_then(|s| s.parse().ok()).unwrap_or(sim::DEFAULT_TRADE_COST);
-    let sim = SimPlugin { catalog, population, goods_path, people_path, trade_cost };
+    let sim = SimPlugin { catalog, population, map, goods_path, people_path, map_path, trade_cost };
 
     if args.iter().any(|a| a == "--headless") {
         let years = arg_after("--headless").and_then(|s| s.parse().ok()).unwrap_or(300);
@@ -60,6 +64,7 @@ fn run_headless(sim: SimPlugin, years: u32) {
         app.world_mut().run_schedule(SimTick);
     }
     let world = app.world();
-    sim::write_csv(world.resource::<Catalog>(), &world.resource::<History>().0, &mut std::io::stdout().lock())
+    let towns: Vec<String> = world.resource::<market::Markets>().towns.iter().map(|t| t.name.clone()).collect();
+    sim::write_csv(world.resource::<Catalog>(), &towns, &world.resource::<History>().0, &mut std::io::stdout().lock())
         .expect("write to stdout");
 }

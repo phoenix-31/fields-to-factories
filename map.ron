@@ -1,0 +1,26 @@
+// The map: terrain and market towns. People live on a 25 × 20 grid; columns count from 0 on the
+// left, rows from 0 at the top. Run with --show-map to see the terrain and where the towns sit.
+//
+// seed          changes the terrain
+// feature_size  roughly how many cells wide hills and valleys are
+// terrain       where each resource is best: Low (valleys), Middle (slopes), High (hills), Anywhere
+// towns         market towns; everyone trades at the nearest one
+// travel_cost   hours to carry one unit of bulk one cell (see bulk in goods.ron)
+
+(
+    seed: 7,
+    feature_size: 8.0,
+    terrain: [
+        ("land", Low),
+        ("pasture", High),
+        ("forest", Middle),
+        ("ore", High),
+    ],
+    towns: [
+        (name: "Rivermouth", at: (16, 15)),
+        (name: "Crossways", at: (11, 9)),
+        (name: "Ironhill", at: (19, 4)),
+        (name: "Westmoor", at: (2, 8)),
+    ],
+    travel_cost: 0.02,
+)
