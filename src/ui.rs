@@ -9,7 +9,8 @@ use bevy_egui::{
 };
 use egui_plot::{FilledArea, Line, Plot, PlotPoints};
 
-use crate::goods::{Catalog, GoodId, Want};
+use crate::goods::{Catalog, GoodId};
+use crate::people::Population;
 use crate::sim::*;
 
 const PANEL_WIDTH: f32 = 480.0;
@@ -34,7 +35,6 @@ impl Plugin for UiPlugin {
         app.insert_resource(SimSpeed { years_per_second: 15.0, paused: false, pending: 0.0 })
             .insert_resource(ClearColor(Color::srgb(0.08, 0.09, 0.11)))
             .add_systems(Startup, setup_cameras)
-            .add_systems(PostStartup, place_people)
             .add_systems(Update, (drive_sim, rebuild_bars, draw_days).chain())
             .add_systems(EguiPrimaryContextPass, control_panel);
     }
@@ -62,7 +62,17 @@ fn setup_cameras(mut commands: Commands, mut egui_settings: ResMut<EguiGlobalSet
 #[derive(Component, Clone, Copy)]
 struct DaySegment(Option<GoodId>);
 
-fn place_people(mut commands: Commands, people: Query<(Entity, &Person)>) {
+fn rebuild_bars(
+    mut commands: Commands,
+    definitions: Res<Definitions>,
+    catalog: Res<Catalog>,
+    people: Query<(Entity, &Person)>,
+    mut built: Local<Option<u32>>,
+) {
+    if *built == Some(definitions.version) {
+        return;
+    }
+    *built = Some(definitions.version);
     let pitch = CELL + GAP;
     let origin = Vec2::new(
         -(POPULATION_COLS as f32 - 1.0) * pitch / 2.0,
@@ -73,27 +83,13 @@ fn place_people(mut commands: Commands, people: Query<(Entity, &Person)>) {
         let pos = origin + Vec2::new(col as f32 * pitch, -(row as f32) * pitch);
         commands
             .entity(entity)
-            .insert((Transform::from_translation(pos.extend(0.0)), Visibility::default()));
-    }
-}
-
-fn rebuild_bars(
-    mut commands: Commands,
-    source: Res<CatalogSource>,
-    catalog: Res<Catalog>,
-    people: Query<Entity, With<Person>>,
-    mut built: Local<Option<u32>>,
-) {
-    if *built == Some(source.version) {
-        return;
-    }
-    *built = Some(source.version);
-    for entity in &people {
-        commands.entity(entity).despawn_related::<Children>().with_children(|bar| {
-            for segment in (0..catalog.len()).map(Some).chain([None]) {
-                bar.spawn((DaySegment(segment), Sprite::from_color(Color::NONE, Vec2::ZERO), Transform::default()));
-            }
-        });
+            .insert((Transform::from_translation(pos.extend(0.0)), Visibility::default()))
+            .despawn_related::<Children>()
+            .with_children(|bar| {
+                for segment in (0..catalog.len()).map(Some).chain([None]) {
+                    bar.spawn((DaySegment(segment), Sprite::from_color(Color::NONE, Vec2::ZERO), Transform::default()));
+                }
+            });
     }
 }
 
@@ -124,17 +120,18 @@ fn color32(rgb: [u8; 3]) -> egui::Color32 {
 
 fn draw_days(
     catalog: Res<Catalog>,
-    people: Query<(&TimeUse, &Nourishment)>,
+    population: Res<Population>,
+    people: Query<(&TimeUse, &NeedsMet)>,
     mut segments: Query<(&DaySegment, &ChildOf, &mut Sprite, &mut Transform)>,
 ) {
     for (segment, child_of, mut sprite, mut transform) in &mut segments {
-        let Ok((time, nourishment)) = people.get(child_of.parent()) else {
+        let Ok((time, needs_met)) = people.get(child_of.parent()) else {
             continue;
         };
         let (below, hours, color) = match segment.0 {
             Some(good) if good < time.hours.len() => {
-                let essential = matches!(catalog.goods[good].want, Want::Essential { .. });
-                let color = if essential && nourishment.0 < 0.999 {
+                let meets_need = population.needs.iter().any(|&(c, _)| catalog.provided(good, c) > 0.0);
+                let color = if meets_need && needs_met.0 < 0.999 {
                     HUNGRY_COLOR
                 } else {
                     catalog.goods[good].color
@@ -165,10 +162,11 @@ fn control_panel(
     mut catalog: ResMut<Catalog>,
     mut economy: ResMut<Economy>,
     mut speed: ResMut<SimSpeed>,
-    source: Res<CatalogSource>,
+    definitions: Res<Definitions>,
+    population: Res<Population>,
     clock: Res<Clock>,
     history: Res<History>,
-    people: Query<(&LandQuality, &Appetite, &TimeUse, &Stock)>,
+    people: Query<(&LandQuality, &Needs, &TimeUse, &Stock)>,
     mut camera: Single<&mut Camera, Without<EguiContext>>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) -> Result {
@@ -189,17 +187,17 @@ fn control_panel(
                 ui.heading("Fields to Factories · stage 2");
                 ui.label(format!("Year {}", clock.year));
                 ui.add_space(6.0);
-                controls(ui, &mut commands, &mut catalog, &mut economy, &mut speed, &source, &history);
+                controls(ui, &mut commands, &mut catalog, &mut economy, &mut speed, &definitions, &history);
                 ui.separator();
-                readout(ui, &catalog, &history, &people);
+                readout(ui, &catalog, &population, &history, &people);
                 ui.add_space(4.0);
                 stacked_chart(ui, &catalog, &history);
                 ui.add_space(4.0);
                 ui.label(
                     egui::RichText::new(
-                        "Each bar is one person's day, best land top-left. People feed themselves \
-                         first, then spend spare hours on whatever is worth most, including tools \
-                         that save hours next year.",
+                        "Each bar is one person's day, best land top-left. People meet their needs \
+                         first, then spend spare hours on whatever their own tastes value most, \
+                         including tools that save hours next year.",
                     )
                     .weak(),
                 );
@@ -222,7 +220,7 @@ fn controls(
     catalog: &mut Catalog,
     economy: &mut Economy,
     speed: &mut SimSpeed,
-    source: &CatalogSource,
+    definitions: &Definitions,
     history: &History,
 ) {
     let names: Vec<String> = catalog.goods.iter().map(|g| g.name.clone()).collect();
@@ -257,7 +255,11 @@ fn controls(
         }
         if ui
             .button("⟲ Reset")
-            .on_hover_text(format!("Back to year 0, reloading {}", source.path.display()))
+            .on_hover_text(format!(
+                "Back to year 0, reloading {} and {}",
+                definitions.goods_path.display(),
+                definitions.people_path.display()
+            ))
             .clicked()
         {
             commands.queue(|world: &mut World| reset(world));
@@ -271,51 +273,62 @@ fn controls(
             }
         }
     });
-    if let Some(error) = &source.error {
-        ui.colored_label(color32(HUNGRY_COLOR), format!("Kept the old catalog: {error}"));
+    if let Some(error) = &definitions.error {
+        ui.colored_label(color32(HUNGRY_COLOR), format!("Kept the old definitions: {error}"));
     }
 }
 
 fn readout(
     ui: &mut egui::Ui,
     catalog: &Catalog,
+    population: &Population,
     history: &History,
-    people: &Query<(&LandQuality, &Appetite, &TimeUse, &Stock)>,
+    people: &Query<(&LandQuality, &Needs, &TimeUse, &Stock)>,
 ) {
     let n = people.iter().count() as f32;
     if n == 0.0 {
         return;
     }
-    for (id, good) in catalog.goods.iter().enumerate() {
-        let Want::Essential { per_appetite, .. } = good.want else {
+    for &(c, _) in &population.needs {
+        let Some(id) = (0..catalog.len())
+            .filter(|&g| catalog.provided(g, c) > 0.0)
+            .max_by(|&a, &b| {
+                let per_hour = |g: GoodId| catalog.provided(g, c) * catalog.goods[g].recipe.rate;
+                per_hour(a).total_cmp(&per_hour(b))
+            })
+        else {
             continue;
         };
-        let (mut needed, mut actual, mut appetite, mut boost) = (0.0, 0.0, 0.0, 0.0);
-        for (land, app, time, stock) in people {
+        let good = &catalog.goods[id];
+        let (mut needed, mut actual, mut amount, mut boost) = (0.0, 0.0, 0.0, 0.0);
+        for (land, needs, time, stock) in people {
             if time.hours.len() != catalog.len() {
                 return;
             }
-            let rate = catalog.direct_rate(id, land.0, &stock.0);
-            needed += (per_appetite * app.0 / rate).min(WAKING_HOURS);
+            let need: f32 = needs.0.iter().filter(|n| n.0 == c).map(|n| n.1).sum();
+            let rate = catalog.provided(id, c) * catalog.direct_rate(id, land.0, &stock.0);
+            needed += (need / rate).min(WAKING_HOURS);
             actual += time.hours[id];
-            appetite += per_appetite * app.0;
+            amount += need;
             boost += catalog.tool_multiplier(id, &stock.0);
         }
-        let (needed, actual, appetite, boost) = (needed / n, actual / n, appetite / n, boost / n);
+        let (needed, actual, amount, boost) = (needed / n, actual / n, amount / n, boost / n);
+        let characteristic = &catalog.characteristics[c];
         let tool = good.recipe.tool.map(|t| catalog.goods[t.good].name.as_str());
         let divisor = match tool {
             Some(tool) => format!("({} per hour × {tool} boost)", good.name),
             None => format!("{} per hour", good.name),
         };
-        ui.label(egui::RichText::new(format!("hours {} ≈ appetite ÷ {divisor}", good.sector)).strong());
+        ui.label(
+            egui::RichText::new(format!("hours {} ≈ {characteristic} needed ÷ {divisor}", good.sector)).strong(),
+        );
         let rate = match tool {
             Some(_) => format!("({:.3} × {boost:.2})", good.recipe.rate),
             None => format!("{:.3}", good.recipe.rate),
         };
         ui.label(format!(
-            "{appetite:.2} ÷ {rate} = {needed:.1} h to have enough, plus {:.1} h for better {}",
-            (actual - needed).max(0.0),
-            good.name
+            "{amount:.2} ÷ {rate} = {needed:.1} h to meet the need, plus {:.1} h because people enjoy more",
+            (actual - needed).max(0.0)
         ));
     }
 

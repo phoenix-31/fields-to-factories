@@ -1,4 +1,4 @@
-//! The goods catalog, loaded from `goods.ron`: what each good is wanted for and how it is made.
+//! The goods catalog, loaded from `goods.ron`: what each good provides and how it is made.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -7,13 +7,7 @@ use bevy::prelude::*;
 use serde::Deserialize;
 
 pub type GoodId = usize;
-
-#[derive(Clone, Copy, Deserialize)]
-pub enum Want {
-    Essential { per_appetite: f32, urgency: f32, luxury: f32 },
-    Diminishing { weight: f32 },
-    Tool,
-}
+pub type CharId = usize;
 
 #[derive(Clone, Copy)]
 pub struct ToolUse {
@@ -41,7 +35,7 @@ pub struct Good {
     pub name: String,
     pub sector: String,
     pub color: [u8; 3],
-    pub want: Want,
+    pub provides: Vec<(CharId, f32)>,
     pub recipe: Recipe,
     pub depreciation: Option<f32>,
 }
@@ -49,6 +43,7 @@ pub struct Good {
 #[derive(Resource, Clone)]
 pub struct Catalog {
     pub goods: Vec<Good>,
+    pub characteristics: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -56,7 +51,8 @@ struct GoodDef {
     name: String,
     sector: String,
     color: [u8; 3],
-    want: Want,
+    #[serde(default)]
+    provides: Vec<(String, f32)>,
     recipe: RecipeDef,
     #[serde(default)]
     depreciation: Option<f32>,
@@ -102,11 +98,23 @@ impl Catalog {
                 .ok_or_else(|| format!("\"{user}\" refers to unknown good \"{name}\""))
         };
 
+        let mut characteristics: Vec<String> = Vec::new();
         let mut goods = Vec::with_capacity(defs.len());
         for def in &defs {
             if def.recipe.rate <= 0.0 {
                 return Err(format!("\"{}\" needs a positive rate", def.name));
             }
+            let provides = def
+                .provides
+                .iter()
+                .map(|(name, amount)| {
+                    let id = characteristics.iter().position(|c| c == name).unwrap_or_else(|| {
+                        characteristics.push(name.clone());
+                        characteristics.len() - 1
+                    });
+                    (id, *amount)
+                })
+                .collect();
             let inputs = def
                 .recipe
                 .inputs
@@ -127,7 +135,7 @@ impl Catalog {
                 name: def.name.clone(),
                 sector: def.sector.clone(),
                 color: def.color,
-                want: def.want,
+                provides,
                 recipe: Recipe {
                     rate: def.recipe.rate,
                     uses_land: def.recipe.uses_land,
@@ -139,7 +147,7 @@ impl Catalog {
             });
         }
 
-        let catalog = Self { goods };
+        let catalog = Self { goods, characteristics };
         for id in 0..catalog.len() {
             catalog.check_acyclic(id, &mut Vec::new())?;
         }
@@ -160,6 +168,19 @@ impl Catalog {
 
     pub fn len(&self) -> usize {
         self.goods.len()
+    }
+
+    pub fn characteristic(&self, name: &str) -> Option<CharId> {
+        self.characteristics.iter().position(|c| c == name)
+    }
+
+    pub fn provided(&self, good: GoodId, characteristic: CharId) -> f32 {
+        self.goods[good]
+            .provides
+            .iter()
+            .filter(|(c, _)| *c == characteristic)
+            .map(|(_, amount)| amount)
+            .sum()
     }
 
     pub fn tool_multiplier(&self, good: GoodId, stock: &[f32]) -> f32 {

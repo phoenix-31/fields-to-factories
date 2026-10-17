@@ -1,5 +1,17 @@
 # Changelog
 
+## Stage 2.1: people own their wants
+
+### Changed
+- **Goods describe facts; people hold wants.** A good now lists what it `provides` (food → nourishment, wares → comfort) instead of saying why it's wanted. Needs and tastes live in a new `people.ron`, as `Needs` and `Tastes` components on each person.
+- **Tools are valued only by the person's own calculation** of hours saved, so the `Tool` want is gone. A good that provides nothing is still worth making if it's a tool or an input.
+- **Tastes differ per person,** drawn from ranges in `people.ron`. Reset reloads both files and redraws the population.
+- **Need urgency is gone.** Needs are met first by construction, so it never affected anything.
+
+### Added
+- **Substitution.** Several goods can provide the same characteristic, and people meet a need with whichever is cheapest for them.
+- **`--people <file>`** chooses a different population definition.
+
 ## Stage 2: the plough
 
 ### Added
