@@ -22,8 +22,6 @@ pub struct ToolUse {
 }
 
 impl ToolUse {
-    /// Output multiplier from holding `stock` of the tool. Every unit up to one saves
-    /// the same number of hours, so a part-worn tool is worth a matching share of a new one.
     pub fn boost(&self, stock: f32) -> f32 {
         1.0 / (1.0 - (1.0 - 1.0 / self.multiplier) * stock.clamp(0.0, 1.0))
     }
@@ -177,7 +175,6 @@ impl Catalog {
         recipe.rate * land * self.tool_multiplier(good, stock)
     }
 
-    /// Hours of work in each sector per unit of `good`, including the hours behind its inputs.
     pub fn embodied_hours(&self, good: GoodId, land: f32, stock: &[f32]) -> Vec<f32> {
         let mut hours = vec![0.0; self.len()];
         hours[good] = 1.0 / self.direct_rate(good, land, stock);

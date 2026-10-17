@@ -166,8 +166,6 @@ fn leisure_utility(hours: f32) -> f32 {
     LEISURE_WEIGHT * (1.0 + hours).ln()
 }
 
-/// Value of adding `extra` to next year's stock of `tool`: the hours it saves each year in every
-/// recipe that uses it, priced at last year's value of an hour, over its discounted lifetime.
 fn tool_gain(
     catalog: &Catalog,
     tool: GoodId,
@@ -328,7 +326,6 @@ fn record_history(
     });
 }
 
-/// Back to year zero, reloading the catalog file so edits to it take effect.
 pub fn reset(world: &mut World) {
     let path = world.resource::<CatalogSource>().path.clone();
     match Catalog::load(&path) {
