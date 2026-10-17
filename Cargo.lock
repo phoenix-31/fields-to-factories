@@ -2571,6 +2571,8 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "egui_plot",
+ "ron",
+ "serde",
 ]
 
 [[package]]

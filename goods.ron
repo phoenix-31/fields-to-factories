@@ -1,0 +1,44 @@
+// Every good in the economy. Edit this file and press Reset in the app to reload it.
+//
+// want:
+//   Essential(..)   needed every day; met before anything else, extra is a small luxury
+//   Diminishing(..) always wanted, each extra unit worth a bit less
+//   Tool            not consumed; valued for the hours it saves in recipes that use it
+// recipe:
+//   rate        units made per hour of work
+//   uses_land   output scales with the worker's land quality
+//   improves    rate grows each year when "improves by" is on
+//   inputs      goods used up per unit made, e.g. [("wares", 2.0)]
+//   tool        a durable good that multiplies this recipe's rate, up to one per person
+// depreciation: share of a durable good's stock that wears out each year
+
+#![enable(implicit_some)]
+[
+    (
+        name: "food",
+        sector: "farming",
+        color: (92, 170, 74),
+        want: Essential(per_appetite: 1.0, urgency: 20.0, luxury: 1.5),
+        recipe: (
+            rate: 0.08,
+            uses_land: true,
+            improves: true,
+            tool: (good: "plough", multiplier: 2.0),
+        ),
+    ),
+    (
+        name: "wares",
+        sector: "crafting",
+        color: (230, 158, 52),
+        want: Diminishing(weight: 1.0),
+        recipe: (rate: 1.0),
+    ),
+    (
+        name: "plough",
+        sector: "plough-making",
+        color: (176, 112, 214),
+        want: Tool,
+        recipe: (rate: 0.05, inputs: [("wares", 2.0)]),
+        depreciation: 0.05,
+    ),
+]

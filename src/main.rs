@@ -1,18 +1,31 @@
 //! `cargo run --release` opens the window; `-- --headless 300` prints 300 years as CSV.
+//! `--goods <file>` picks the catalog (default `goods.ron`).
 
+mod goods;
 mod sim;
 mod ui;
+
+use std::path::PathBuf;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 
+use goods::Catalog;
 use sim::{History, SimPlugin, SimTick};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if let Some(i) = args.iter().position(|a| a == "--headless") {
-        let years = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(300);
-        run_headless(years);
+    let arg_after = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1));
+    let goods_path = PathBuf::from(arg_after("--goods").map_or("goods.ron", |s| s.as_str()));
+    let catalog = Catalog::load(&goods_path).unwrap_or_else(|e| {
+        eprintln!("{e}");
+        std::process::exit(1);
+    });
+    let sim = SimPlugin { catalog, goods_path };
+
+    if args.iter().any(|a| a == "--headless") {
+        let years = arg_after("--headless").and_then(|s| s.parse().ok()).unwrap_or(300);
+        run_headless(sim, years);
         return;
     }
 
@@ -25,19 +38,20 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins((EguiPlugin::default(), SimPlugin, ui::UiPlugin))
+        .add_plugins((EguiPlugin::default(), sim, ui::UiPlugin))
         .run();
 }
 
-fn run_headless(years: u32) {
+fn run_headless(sim: SimPlugin, years: u32) {
     let mut app = App::new();
-    app.add_plugins((MinimalPlugins, SimPlugin));
+    app.add_plugins((MinimalPlugins, sim));
     app.finish();
     app.cleanup();
     app.update();
     for _ in 0..years {
         app.world_mut().run_schedule(SimTick);
     }
-    let history = app.world().resource::<History>();
-    sim::write_csv(&history.0, &mut std::io::stdout().lock()).expect("write to stdout");
+    let world = app.world();
+    sim::write_csv(world.resource::<Catalog>(), &world.resource::<History>().0, &mut std::io::stdout().lock())
+        .expect("write to stdout");
 }
