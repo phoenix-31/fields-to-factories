@@ -1,5 +1,23 @@
 # Changelog
 
+## Stage 4: trade
+
+### Added
+- **A marketplace with prices,** measured in hours of an average person's work. Each year a good's price rises if more was bought than sold, and falls if the opposite.
+- **Make or buy.** For every good and every input, people compare making it with earning the money at their job and buying it. A smith can buy iron rather than mine ore.
+- **Jobs and wages.** A job is the good someone makes to sell; the wage is what an hour of it earns after bought inputs. People start self-sufficient and join the market gradually: each year about one in five reviews their job, choosing better-paying jobs more often but not always.
+- **Trade cost,** paid as time at market in proportion to the price, so money balances. Slider in the panel, `--trade-cost` on the command line.
+- **Tool lifetimes.** Tools are whole items that last a random number of years (`lifetime` in `goods.ron`) and then break. Hours or money put towards a tool build up as progress until there's a whole one.
+- **Panel and CSV:** prices in the production tree, a trading band in the chart and in every bar, a specialisation line, and unmatched trade. The CSV adds prices, trading time, specialisation, share of work sold and mismatch.
+
+### Changed
+- `depreciation` in `goods.ron` became `lifetime: (min, max)` in years.
+
+### Results
+- With the default 30% trade cost, specialisation rises from about 55% to about 90%, and farming falls to 20% of the day by year 100, against 36% without trade.
+- Leisure is about 2–5 points higher with trade than without, depending on the trade cost.
+- Once the market has formed, about 8% of trade by value is unmatched in a given year. Faster price changes made this far worse, because prices overshot.
+
 ## Stage 3: iron and charcoal
 
 ### Added

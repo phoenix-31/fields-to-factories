@@ -10,6 +10,7 @@ use bevy_egui::{
 use egui_plot::{FilledArea, Line, Plot, PlotPoints};
 
 use crate::goods::{Catalog, GoodId};
+use crate::market::Market;
 use crate::people::Population;
 use crate::sim::*;
 
@@ -18,7 +19,9 @@ const CELL: f32 = 24.0;
 const GAP: f32 = 4.0;
 
 const LEISURE_COLOR: [u8; 3] = [78, 140, 230];
+const TRADING_COLOR: [u8; 3] = [64, 196, 180];
 const HUNGRY_COLOR: [u8; 3] = [214, 64, 64];
+const SPECIALISATION_COLOR: [u8; 3] = [250, 250, 250];
 
 #[derive(Resource)]
 struct SimSpeed {
@@ -59,7 +62,11 @@ fn setup_cameras(mut commands: Commands, mut egui_settings: ResMut<EguiGlobalSet
 }
 
 #[derive(Component, Clone, Copy)]
-struct DaySegment(Option<GoodId>);
+enum DaySegment {
+    Good(GoodId),
+    Trading,
+    Leisure,
+}
 
 fn rebuild_bars(
     mut commands: Commands,
@@ -85,8 +92,9 @@ fn rebuild_bars(
             .insert((Transform::from_translation(pos.extend(0.0)), Visibility::default()))
             .despawn_related::<Children>()
             .with_children(|bar| {
-                for segment in (0..catalog.len()).map(Some).chain([None]) {
-                    bar.spawn((DaySegment(segment), Sprite::from_color(Color::NONE, Vec2::ZERO), Transform::default()));
+                let segments = (0..catalog.len()).map(DaySegment::Good).chain([DaySegment::Trading, DaySegment::Leisure]);
+                for segment in segments {
+                    bar.spawn((segment, Sprite::from_color(Color::NONE, Vec2::ZERO), Transform::default()));
                 }
             });
     }
@@ -127,8 +135,9 @@ fn draw_days(
         let Ok((time, needs_met)) = people.get(child_of.parent()) else {
             continue;
         };
-        let (below, hours, color) = match segment.0 {
-            Some(good) if good < time.hours.len() => {
+        let worked: f32 = time.hours.iter().sum();
+        let (below, hours, color) = match *segment {
+            DaySegment::Good(good) if good < time.hours.len() => {
                 let meets_need = population.needs.iter().any(|&(c, _)| catalog.provided(good, c) > 0.0);
                 let color = if meets_need && needs_met.0 < 0.999 {
                     HUNGRY_COLOR
@@ -137,8 +146,9 @@ fn draw_days(
                 };
                 (time.hours[..good].iter().sum::<f32>(), time.hours[good], color)
             }
-            Some(_) => continue,
-            None => (time.hours.iter().sum(), time.leisure, LEISURE_COLOR),
+            DaySegment::Good(_) => continue,
+            DaySegment::Trading => (worked, time.trading, TRADING_COLOR),
+            DaySegment::Leisure => (worked + time.trading, time.leisure, LEISURE_COLOR),
         };
         let height = CELL * hours / WAKING_HOURS;
         let bottom = -CELL / 2.0 + CELL * below / WAKING_HOURS;
@@ -169,7 +179,8 @@ fn control_panel(
     population: Res<Population>,
     clock: Res<Clock>,
     history: Res<History>,
-    people: Query<(&Endowments, &Needs, &TimeUse, &Stock)>,
+    mut market: ResMut<Market>,
+    people: Query<(&Endowments, &Needs, &TimeUse, &Tools)>,
     mut camera: Single<&mut Camera, Without<EguiContext>>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) -> Result {
@@ -187,14 +198,14 @@ fn control_panel(
         .resizable(false)
         .show(&mut root, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.heading("Fields to Factories · stage 3");
+                ui.heading("Fields to Factories · stage 4");
                 ui.label(format!("Year {}", clock.year));
                 ui.add_space(6.0);
-                controls(ui, &mut commands, &mut catalog, &mut economy, &mut speed, &definitions, &history);
+                controls(ui, &mut commands, &mut catalog, &mut economy, &mut market, &mut speed, &definitions, &history);
                 ui.separator();
                 readout(ui, &catalog, &population, &history, &people);
                 ui.add_space(6.0);
-                production_tree(ui, &catalog, &history);
+                production_tree(ui, &catalog, &market, &history);
                 ui.add_space(6.0);
                 stacked_chart(ui, &catalog, &history);
                 ui.add_space(4.0);
@@ -202,7 +213,7 @@ fn control_panel(
                     egui::RichText::new(
                         "Each bar is one person's day, best-endowed top-left. People meet their \
                          needs first, then spend spare hours on whatever their own tastes value \
-                         most, including tools that save hours next year.",
+                         most. Every good is made or bought, whichever costs that person fewer hours.",
                     )
                     .weak(),
                 );
@@ -219,11 +230,13 @@ fn control_panel(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn controls(
     ui: &mut egui::Ui,
     commands: &mut Commands,
     catalog: &mut Catalog,
     economy: &mut Economy,
+    market: &mut Market,
     speed: &mut SimSpeed,
     definitions: &Definitions,
     history: &History,
@@ -255,6 +268,12 @@ fn controls(
         );
         ui.label("a year");
     });
+    ui.add(
+        egui::Slider::new(&mut market.trade_cost, 0.0..=2.0)
+            .custom_formatter(|v, _| format!("{:.0}%", v * 100.0))
+            .custom_parser(|s| s.trim_end_matches('%').parse::<f64>().ok().map(|v| v / 100.0))
+            .text("trade cost on top of the price"),
+    );
     ui.add(egui::Slider::new(&mut speed.years_per_second, 1.0..=60.0).text("years per second"));
     ui.horizontal(|ui| {
         if ui.button(if speed.paused { "▶ Run" } else { "⏸ Pause" }).clicked() {
@@ -294,7 +313,7 @@ fn readout(
     catalog: &Catalog,
     population: &Population,
     history: &History,
-    people: &Query<(&Endowments, &Needs, &TimeUse, &Stock)>,
+    people: &Query<(&Endowments, &Needs, &TimeUse, &Tools)>,
 ) {
     let n = people.iter().count() as f32;
     if n == 0.0 {
@@ -312,16 +331,17 @@ fn readout(
         };
         let good = &catalog.goods[id];
         let (mut needed, mut actual, mut amount, mut boost) = (0.0, 0.0, 0.0, 0.0);
-        for (endowments, needs, time, stock) in people {
-            if time.hours.len() != catalog.len() || stock.0.len() != catalog.len() {
+        for (endowments, needs, time, tools) in people {
+            if time.hours.len() != catalog.len() || tools.years_left.len() != catalog.len() {
                 return;
             }
+            let owned = tools.owned();
             let need: f32 = needs.0.iter().filter(|n| n.0 == c).map(|n| n.1).sum();
-            let rate = catalog.provided(id, c) * catalog.direct_rate(id, &endowments.0, &stock.0);
+            let rate = catalog.provided(id, c) * catalog.direct_rate(id, &endowments.0, &owned);
             needed += (need / rate).min(WAKING_HOURS);
             actual += time.hours[id];
             amount += need;
-            boost += catalog.tool_multiplier(id, &stock.0);
+            boost += catalog.tool_multiplier(id, &owned);
         }
         let (needed, actual, amount, boost) = (needed / n, actual / n, amount / n, boost / n);
         let characteristic = &catalog.characteristics[c];
@@ -351,7 +371,7 @@ fn readout(
     ui.horizontal_wrapped(|ui| {
         ui.label("Working tools:");
         for (id, good) in catalog.goods.iter().enumerate() {
-            if good.depreciation.is_some() {
+            if good.is_tool() {
                 ui.colored_label(
                     color32(lighten(good.color)),
                     format!("{} {:.0}%", good.name, last.coverage[id] * 100.0),
@@ -364,6 +384,23 @@ fn readout(
         last.leisure_share * 100.0,
         last.hungry_share * 100.0
     ));
+    let mismatch = if last.traded > 0.01 {
+        format!(" · {:.0}% of trade unmatched", last.mismatch * 100.0)
+    } else {
+        String::new()
+    };
+    ui.label(format!(
+        "Specialisation {:.0}% · {:.0}% of work sold · trading takes {:.0}% of the day{mismatch}",
+        last.specialisation * 100.0,
+        last.traded * 100.0,
+        last.trading_share * 100.0
+    ))
+    .on_hover_text(
+        "Specialisation: on average, the share of a person's working hours spent in their main sector.\n\
+         Work sold: value of goods sold, in hours, as a share of all hours worked.\n\
+         Unmatched: goods bought with no seller, or sold with no buyer, this year; merchants absorb the gap \
+         and prices move to close it.",
+    );
 }
 
 fn columns(catalog: &Catalog) -> Vec<usize> {
@@ -402,7 +439,7 @@ fn columns(catalog: &Catalog) -> Vec<usize> {
     cols
 }
 
-fn production_tree(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
+fn production_tree(ui: &mut egui::Ui, catalog: &Catalog, market: &Market, history: &History) {
     let cols = columns(catalog);
     let col_count = cols.iter().copied().max().unwrap_or(0) + 1;
     let mut rows = vec![0usize; catalog.len()];
@@ -413,7 +450,7 @@ fn production_tree(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
     }
     let max_rows = per_col.iter().copied().max().unwrap_or(1);
 
-    let (node_h, row_gap) = (34.0, 12.0);
+    let (node_h, row_gap) = (46.0, 12.0);
     let width = ui.available_width();
     let col_w = width / col_count as f32;
     let node_w = (col_w - 16.0).max(40.0);
@@ -461,7 +498,7 @@ fn production_tree(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
             11.0
         };
         painter.text(
-            rect.center() - egui::vec2(0.0, 7.0),
+            rect.center() - egui::vec2(0.0, 13.0),
             egui::Align2::CENTER_CENTER,
             &def.name,
             egui::FontId::proportional(name_size),
@@ -469,9 +506,17 @@ fn production_tree(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
         );
         let share = shares.get(good).copied().unwrap_or(0.0) * 100.0;
         painter.text(
-            rect.center() + egui::vec2(0.0, 8.0),
+            rect.center() + egui::vec2(0.0, 1.0),
             egui::Align2::CENTER_CENTER,
             format!("{share:.1}% of hours"),
+            egui::FontId::proportional(10.0),
+            text,
+        );
+        let price = market.prices.get(good).copied().unwrap_or(0.0);
+        painter.text(
+            rect.center() + egui::vec2(0.0, 14.0),
+            egui::Align2::CENTER_CENTER,
+            format!("price {price:.2} h"),
             egui::FontId::proportional(10.0),
             text,
         );
@@ -492,17 +537,27 @@ fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
         bands.push((good.sector.clone(), good.color, lower, upper.clone()));
         lower = upper;
     }
-    bands.push(("leisure".into(), LEISURE_COLOR, lower, vec![100.0; samples.len()]));
+    let trading: Vec<f64> = samples
+        .iter()
+        .zip(&lower)
+        .map(|(s, l)| l + s.trading_share as f64 * 100.0)
+        .collect();
+    bands.push(("trading".into(), TRADING_COLOR, lower, trading.clone()));
+    bands.push(("leisure".into(), LEISURE_COLOR, trading, vec![100.0; samples.len()]));
 
     let hungry: PlotPoints = samples
         .iter()
         .map(|s| [s.year as f64, s.hungry_share as f64 * 100.0])
         .collect();
+    let specialisation: PlotPoints = samples
+        .iter()
+        .map(|s| [s.year as f64, s.specialisation as f64 * 100.0])
+        .collect();
     let coverage: Vec<(String, [u8; 3], PlotPoints)> = catalog
         .goods
         .iter()
         .enumerate()
-        .filter(|(_, g)| g.depreciation.is_some())
+        .filter(|(_, g)| g.is_tool())
         .map(|(id, g)| {
             let points = samples
                 .iter()
@@ -530,13 +585,21 @@ fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
             for (name, color, points) in coverage {
                 plot.line(Line::new(name, points).color(color32(color)).width(2.0));
             }
+            plot.line(
+                Line::new("specialisation (%)", specialisation)
+                    .color(color32(SPECIALISATION_COLOR))
+                    .style(egui_plot::LineStyle::dashed_loose())
+                    .width(2.0),
+            );
         });
 
     ui.horizontal_wrapped(|ui| {
         for good in &catalog.goods {
             swatch(ui, good.color, &good.sector);
         }
+        swatch(ui, TRADING_COLOR, "trading");
         swatch(ui, LEISURE_COLOR, "leisure");
         swatch(ui, HUNGRY_COLOR, "hungry");
+        swatch(ui, SPECIALISATION_COLOR, "specialisation (dashed)");
     });
 }

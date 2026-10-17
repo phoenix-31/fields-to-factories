@@ -1,7 +1,9 @@
 //! `cargo run --release` opens the window; `-- --headless 300` prints 300 years as CSV.
-//! `--goods <file>` and `--people <file>` pick the definitions (default `goods.ron`, `people.ron`).
+//! `--goods <file>` and `--people <file>` pick the definitions (default `goods.ron`, `people.ron`);
+//! `--trade-cost <x>` sets the starting trade cost (0.3 = 30% of the price, paid in time).
 
 mod goods;
+mod market;
 mod people;
 mod sim;
 mod ui;
@@ -26,7 +28,8 @@ fn main() {
         eprintln!("{e}");
         std::process::exit(1);
     });
-    let sim = SimPlugin { catalog, population, goods_path, people_path };
+    let trade_cost = arg_after("--trade-cost").and_then(|s| s.parse().ok()).unwrap_or(sim::DEFAULT_TRADE_COST);
+    let sim = SimPlugin { catalog, population, goods_path, people_path, trade_cost };
 
     if args.iter().any(|a| a == "--headless") {
         let years = arg_after("--headless").and_then(|s| s.parse().ok()).unwrap_or(300);

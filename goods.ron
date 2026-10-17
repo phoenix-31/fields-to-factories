@@ -6,9 +6,8 @@
 //   uses        a resource whose quality (per person, see people.ron) scales the rate
 //   improves    rate grows each year when "improving goods get better" is on
 //   inputs      goods used up per unit made, e.g. [("wood", 2.0)]
-//   tools       durable goods that multiply this recipe's rate; the best one owned is used first,
-//               and together they cover at most one person's work
-// depreciation  share of a durable good's stock that wears out each year
+//   tools       tools that multiply this recipe's rate; a person works with the best one they own
+// lifetime      makes the good a tool: years it lasts before it breaks, drawn from the range
 
 #![enable(implicit_some)]
 [
@@ -63,13 +62,13 @@
         sector: "wooden plough-making",
         color: (214, 190, 140),
         recipe: (rate: 0.25, inputs: [("wood", 2.0)]),
-        depreciation: 0.15,
+        lifetime: (3.0, 8.0),
     ),
     (
         name: "iron plough",
         sector: "iron plough-making",
         color: (176, 112, 214),
         recipe: (rate: 0.1, inputs: [("iron", 2.0), ("wood", 2.0)]),
-        depreciation: 0.04,
+        lifetime: (15.0, 35.0),
     ),
 ]

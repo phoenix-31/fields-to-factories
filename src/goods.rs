@@ -6,6 +6,8 @@ use std::path::Path;
 use bevy::prelude::*;
 use serde::Deserialize;
 
+use crate::people::Spread;
+
 pub type GoodId = usize;
 pub type CharId = usize;
 pub type ResourceId = usize;
@@ -32,7 +34,13 @@ pub struct Good {
     pub color: [u8; 3],
     pub provides: Vec<(CharId, f32)>,
     pub recipe: Recipe,
-    pub depreciation: Option<f32>,
+    pub lifetime: Option<Spread>,
+}
+
+impl Good {
+    pub fn is_tool(&self) -> bool {
+        self.lifetime.is_some()
+    }
 }
 
 #[derive(Resource, Clone)]
@@ -40,6 +48,7 @@ pub struct Catalog {
     pub goods: Vec<Good>,
     pub characteristics: Vec<String>,
     pub resources: Vec<String>,
+    pub build_order: Vec<GoodId>,
 }
 
 #[derive(Deserialize)]
@@ -51,7 +60,7 @@ struct GoodDef {
     provides: Vec<(String, f32)>,
     recipe: RecipeDef,
     #[serde(default)]
-    depreciation: Option<f32>,
+    lifetime: Option<Spread>,
 }
 
 #[derive(Deserialize)]
@@ -124,8 +133,8 @@ impl Catalog {
                 .iter()
                 .map(|t| {
                     let good = lookup(&t.good, &def.name)?;
-                    if defs[good].depreciation.is_none() {
-                        return Err(format!("tool \"{}\" must have a depreciation rate", t.good));
+                    if defs[good].lifetime.is_none() {
+                        return Err(format!("tool \"{}\" must have a lifetime", t.good));
                     }
                     if t.multiplier < 1.0 {
                         return Err(format!("tool \"{}\" needs a multiplier of at least 1", t.good));
@@ -151,15 +160,34 @@ impl Catalog {
                     inputs,
                     tools,
                 },
-                depreciation: def.depreciation,
+                lifetime: def.lifetime,
             });
         }
 
-        let catalog = Self { goods, characteristics, resources };
+        if let Some(def) = defs.iter().find(|d| d.lifetime.is_some_and(|l| l.min() < 1.0)) {
+            return Err(format!("\"{}\" needs a lifetime of at least 1 year", def.name));
+        }
+
+        let mut catalog = Self { goods, characteristics, resources, build_order: Vec::new() };
         for id in 0..catalog.len() {
             catalog.check_acyclic(id, &mut Vec::new())?;
         }
+        let mut order = Vec::new();
+        for id in 0..catalog.len() {
+            catalog.visit(id, &mut order);
+        }
+        catalog.build_order = order;
         Ok(catalog)
+    }
+
+    fn visit(&self, good: GoodId, order: &mut Vec<GoodId>) {
+        if order.contains(&good) {
+            return;
+        }
+        for &(input, _) in &self.goods[good].recipe.inputs {
+            self.visit(input, order);
+        }
+        order.push(good);
     }
 
     fn check_acyclic(&self, good: GoodId, path: &mut Vec<GoodId>) -> Result<(), String> {
@@ -215,16 +243,5 @@ impl Catalog {
         let recipe = &self.goods[good].recipe;
         let endowment = recipe.uses.map_or(1.0, |r| endowments[r]);
         recipe.rate * endowment * self.tool_multiplier(good, stock)
-    }
-
-    pub fn embodied_hours(&self, good: GoodId, endowments: &[f32], stock: &[f32]) -> Vec<f32> {
-        let mut hours = vec![0.0; self.len()];
-        hours[good] = 1.0 / self.direct_rate(good, endowments, stock);
-        for &(input, qty) in &self.goods[good].recipe.inputs {
-            for (h, sub) in hours.iter_mut().zip(self.embodied_hours(input, endowments, stock)) {
-                *h += qty * sub;
-            }
-        }
-        hours
     }
 }

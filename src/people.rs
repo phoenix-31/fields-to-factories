@@ -15,10 +15,17 @@ pub enum Spread {
 }
 
 impl Spread {
-    fn min(&self) -> f32 {
+    pub fn min(&self) -> f32 {
         match *self {
             Spread::Fixed(v) => v,
             Spread::Range(lo, hi) => lo.min(hi),
+        }
+    }
+
+    pub fn mean(&self) -> f32 {
+        match *self {
+            Spread::Fixed(v) => v,
+            Spread::Range(lo, hi) => (lo + hi) / 2.0,
         }
     }
 
