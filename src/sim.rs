@@ -12,18 +12,14 @@ pub const POPULATION_ROWS: usize = 20;
 const POPULATION: usize = POPULATION_COLS * POPULATION_ROWS;
 
 const FOOD_URGENCY: f32 = 20.0;
-// Bounded, not log: log utility would pin luxury-farming hours at a constant
-// no matter how productive farms became.
 const FOOD_LUXURY: f32 = 1.5;
 const LEISURE_WEIGHT: f32 = 1.0;
 
-/// One simulated year, run on demand by the GUI timer or the headless loop.
 #[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SimTick;
 
 #[derive(Component)]
 pub struct Person {
-    /// Grid position, best land first.
     pub rank: usize,
 }
 
@@ -40,13 +36,11 @@ pub struct TimeUse {
     pub leisure: f32,
 }
 
-/// Food eaten ÷ appetite. Below 1.0 means hungry.
 #[derive(Component, Default)]
 pub struct Nourishment(pub f32);
 
 #[derive(Resource, Clone)]
 pub struct Economy {
-    /// Days of food produced per hour on average land.
     pub farm_productivity: f32,
     pub craft_productivity: f32,
     pub auto_growth: bool,
@@ -55,7 +49,6 @@ pub struct Economy {
 
 impl Default for Economy {
     fn default() -> Self {
-        // ~12.5 of 16 hours spent farming: roughly pre-industrial.
         Self {
             farm_productivity: 0.08,
             craft_productivity: 1.0,
@@ -85,7 +78,6 @@ pub struct Sample {
 #[derive(Resource, Default)]
 pub struct History(pub Vec<Sample>);
 
-/// Seeded SplitMix64, so runs are reproducible.
 #[derive(Resource)]
 pub struct SimRng(u64);
 
@@ -158,7 +150,6 @@ fn leisure_utility(hours: f32) -> f32 {
     LEISURE_WEIGHT * (1.0 + hours).ln()
 }
 
-/// Greedy slice-by-slice choice; optimal for the whole day because every utility is concave.
 fn allocate_time(
     economy: Res<Economy>,
     mut people: Query<(&LandQuality, &Appetite, &mut TimeUse, &mut Nourishment)>,

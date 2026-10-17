@@ -44,7 +44,6 @@ impl Plugin for UiPlugin {
     }
 }
 
-/// A second camera for egui lets the grid camera be confined right of the panel.
 fn setup_cameras(mut commands: Commands, mut egui_settings: ResMut<EguiGlobalSettings>) {
     egui_settings.auto_create_primary_context = false;
     commands.spawn(Camera2d);
@@ -71,7 +70,6 @@ enum DaySegment {
     Leisure,
 }
 
-/// Each person is drawn as a bar of their day: farming at the bottom, then crafting, then leisure.
 fn attach_sprites(mut commands: Commands, people: Query<(Entity, &Person)>) {
     let pitch = CELL + GAP;
     let origin = Vec2::new(
@@ -106,7 +104,6 @@ fn drive_sim(world: &mut World) {
         speed.pending += dt * speed.years_per_second;
         let whole = speed.pending.floor();
         speed.pending -= whole;
-        // Cap catch-up after a stall.
         (whole as u32).min(10)
     };
     for _ in 0..years {
