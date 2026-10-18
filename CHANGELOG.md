@@ -12,7 +12,10 @@
 
 ### Changed
 - `sim::headless_app` builds the headless app for both `--headless` and the tests.
-- The planner's long query became a named `Planner` query, and the three old clippy warnings are fixed. Output is unchanged, byte for byte.
+- The planner's long query became a named `Planner` query, and the three old clippy warnings are fixed.
+- **`sim.rs` is split** into `sim/` modules: `mod.rs` (plugin, schedule, reset), `person.rs`, `plan.rs`, `place.rs`, `trade.rs` and `history.rs`.
+- **One place makes a person:** `new_person`, ready for births.
+- Output is unchanged, byte for byte.
 
 ## No more steady technological progress
 

@@ -142,7 +142,12 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
 | `src/people.rs` | Loads and validates the population definition; tastes and their curves |
 | `src/map.rs` | Loads the map, generates terrain and finds each spot's nearest town |
 | `src/market.rs` | Each town's prices, merchants between towns, and each person's make-or-buy routes and job choice |
-| `src/sim.rs` | People as ECS components (`Home`, `Endowments`, `Needs`, `Tastes`, `Tools`, `Job`, `Trades`, …), and the `SimTick` schedule: count crowding → plan each day → replace tools → clear the market → migrate → record history |
+| `src/sim/mod.rs` | The plugin and the `SimTick` schedule: tick the clock → count crowding → plan each year → replace tools → clear the market → migrate → record history; resetting from the files |
+| `src/sim/person.rs` | People as ECS components (`Home`, `Endowments`, `Needs`, `Tastes`, `Tools`, `Job`, `Trades`, …), `new_person`, and tools wearing out |
+| `src/sim/plan.rs` | Each person's year: job, routes, needs first, then spare quarter-hours, tools and saving ahead |
+| `src/sim/place.rs` | Crowding and migration |
+| `src/sim/trade.rs` | Opening and clearing each town's market |
+| `src/sim/history.rs` | Yearly samples and the CSV |
 | `src/ui/mod.rs` | The map: terrain, towns, and each person's day or main work |
 | `src/ui/panel.rs` | Top bar, tabbed side panel, map key, hover details and the How it works window |
 | `src/ui/charts.rs` | The production tree, and the history chart with its expandable sector bands |

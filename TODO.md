@@ -45,8 +45,8 @@ Ore ranges smoothly from 0.1 to 1.6 over much of the map, so plenty of people ca
 
 Each is tied to the feature that will need it. The tests guard behaviour while these are done.
 
-- [ ] **Split `sim.rs`** (840 lines). It holds the components, spawning, the yearly plan, tools, migration, history and the CSV. Split it into `sim/` modules. *Before births and deaths*, which add a person lifecycle.
-- [ ] **One place to make a person.** Spawning builds about 15 components inline. Births will need the same, so make one constructor. Per-person random seeds come from the spawn order; births need a seed source that keeps runs repeatable (the tests check this).
+- [x] **Split `sim.rs`** (840 lines), done. It holds the components, spawning, the yearly plan, tools, migration, history and the CSV. Split it into `sim/` modules. *Before births and deaths*, which add a person lifecycle.
+- [x] **One place to make a person:** `new_person`, done. Per-person random seeds come from the spawn order; births need a seed source that keeps runs repeatable (the tests check this).
 - [ ] **Typed per-good vectors.** Hours, purchases, sales, prices, tool progress and coverage are all plain `Vec<f32>` indexed by good, with length checks scattered through the UI. Multiple recipes will add a second index (per recipe) beside the per-good one, which is easy to mix up. Use typed indices or a `PerGood<T>` wrapper. *Before multiple recipes.*
 - [ ] **One recipe per good is baked in:** `Good.recipe`, `direct_rate(good)`, hours tracked by good, and each good is its own sector leaf. Separate "what is made" from "how". *This is most of the work of multiple recipes.*
 - [ ] **Break up `plan_routes`** (126 lines). It runs a fixed four-pass loop that works out make-or-buy shares, the wage and the job choice together, then builds the flows. Split it into costs given a wage, job choice, and flows, so each can be tested alone.
@@ -90,11 +90,19 @@ The four towns are placed by hand in `map.ron`, and people's settlement is pulle
 
 Things any option needs: stable market ids, a CSV and Towns tab that cope with markets appearing and closing, settlement that doesn't assume towns, and a rule for which market a person uses (nearest open one, or the best net of carrying).
 
-- [ ] **?** Which option, and when?
+- [x] Chosen: **emergent market towns** (option 1). After births and deaths.
+
+## Next: births and deaths
+
+Chosen as the next stage. Start from a smaller population and let it grow, with hunger carrying real risk.
+
+- **?** What sets births and deaths: a base rate each, with births rising and deaths falling as people meet their needs and have spare time?
+- **?** Ages: do people have an age (children who don't work yet, old age), or is each person simply a working adult who can die or have a child?
+- **?** What a child gets: born next to a parent, with tastes drawn fresh or near the parent's, and does it inherit tools when the parent dies?
+- **?** Starting size, and whether land limits growth through crowding alone (a Malthusian ceiling) or something else.
 
 ## Ideas, not yet planned
 
-- **Births and deaths** (on the cards), starting from a smaller population. Going short of food should then carry real risk.
 - **A plough for every household.** About 750 people who farm only for themselves each own an iron plough. A tool's value scales with hours used, and there's no way to share or hire one. Historically, ploughs and teams were shared, or ploughing was hired as a service; a cottager with a small plot dug with a spade. **?** Should tools be hireable (a ploughing service, which would be tertiary work), or need a minimum farm size to pay?
 
 - Who gains: track each person's consumption and leisure to see whether gains spread evenly (the old "stage 6").
@@ -111,3 +119,4 @@ Things any option needs: stable market ids, a CSV and Towns tab that cope with m
 - **2026-10-18:** hungry people now value saved hours most and can invest while short. They invest their way out of hunger by year 8, so trade and migration no longer decide who escapes it. New open question on whether going short should cost anything.
 - **2026-10-18:** steady technological progress removed; the economy now settles by year 50. Found that iron-plough ownership tracks who grows their own wheat; noted ploughing-as-a-service and births and deaths under ideas.
 - **2026-10-18:** 34 tests added and the old lint warnings fixed. Refactors flagged, each tied to the feature that needs it. Emergent markets written up with three options.
+- **2026-10-18:** chose emergent market towns, and births and deaths as the next stage. Split `sim.rs` and added `new_person` in preparation. Open questions on births and deaths written up.
