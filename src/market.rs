@@ -160,6 +160,7 @@ pub fn plan_routes(
     owned: &[f32],
     job: Option<GoodId>,
     review: Option<f32>,
+    work_hours: f32,
 ) -> Routes {
     let n = catalog.len();
     let direct: Vec<f32> = (0..n).map(|g| 1.0 / catalog.direct_rate(g, endowments, owned)).collect();
@@ -185,10 +186,26 @@ pub fn plan_routes(
             buy_share[g] = if wage > 1e-6 { share_bought(h * wage + m, market.full_cost(g, wage)) } else { 0.0 };
         }
         let earning = |g: GoodId| (market.prices[g] - money[g]) / (hours[g] + market.carrying[g]);
+        let with_tools = |g: GoodId| {
+            catalog.goods[g]
+                .recipe
+                .tools
+                .iter()
+                .filter(|t| owned[t.good] <= 0.0)
+                .map(|t| {
+                    let mut kit = owned.to_vec();
+                    kit[t.good] = 1.0;
+                    let h = hours[g] - direct[g] + 1.0 / catalog.direct_rate(g, endowments, &kit);
+                    let life = catalog.goods[t.good].lifetime.map_or(1.0, |l| l.mean());
+                    let upkeep = market.full_cost(t.good, wage) / life / work_hours.max(1.0);
+                    (market.prices[g] - money[g]) / (h + market.carrying[g]) - upkeep
+                })
+                .fold(earning(g), f32::max)
+        };
         let chosen = match (review, current.filter(|&j| earning(j) > 1e-6)) {
             (None, Some(j)) => Some(j),
             (None, None) if current.is_none() => None,
-            (draw, _) => job.filter(|&j| earning(j) > 1e-6).or_else(|| choose_job(&earning, n, draw.unwrap_or(0.5))),
+            (draw, _) => job.filter(|&j| earning(j) > 1e-6).or_else(|| choose_job(&with_tools, n, draw.unwrap_or(0.5))),
         };
         (wage, job) = match chosen {
             Some(j) => (earning(j), Some(j)),

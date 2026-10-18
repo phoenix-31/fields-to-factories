@@ -43,18 +43,12 @@ Ore ranges smoothly from 0.1 to 1.6 over much of the map, so plenty of people ca
 
 ## Model flaws found
 
-### Ploughs slowly disappear (found in your 7,600-year no-technology run)
+### Ploughs slowly disappear: fixed
 
-Iron-plough ownership drifts from about 49% at year 100 to 17% at year 7,600, and wheat farming rises from 43% to 64% of the day. With migration off it's faster: 30% to 5% in 3,000 years. Two causes, both found by logging every plough that reaches the end of its life:
+Found in your 7,600-year no-technology run. Fixed with a sinking fund and choosing jobs with their tools (fixes 1 and 2), plus a rounding bug found on the way that left people stuck at 99.99% of a tool. See the CHANGELOG for the numbers.
 
-1. **No saving ahead.** People only start paying for a replacement in the old tool's last year. An iron plough costs about 22 hours of average work, more than most can spare in one year, so 94% of owners are left without one for a year or more (they'd saved 60–70% of it). A test where people start saving five years ahead cut these gaps from 94% to about 3%.
-2. **Nobody new takes up the plough.** A plough is valued by the hours *you* farmed last year, and a job is chosen with the tools *you* own now. So a non-farmer never values a plough, and a farmer without one never looks like a good farmer. Each owner who drops out isn't replaced; the remaining owners farm longer instead. Even with saving ahead, new buyers fell to almost none and ownership still drifted from 40% to 18% over 2,000 years.
-
-The early high ownership is a legacy of the start, when everyone farmed for themselves and wanted a plough. The model then slowly relaxes towards fewer, overworked plough farmers. It's slow because ploughs last 15–35 years and only a few percent of each generation are lost.
-
-- [ ] **?** Fix 1: save towards a replacement over the tool's life (a sinking fund), or start saving a few years before it's due?
-- [ ] **?** Fix 2: when people review their job, compare "job plus the tools it uses" bundles, so becoming a ploughing farmer is one decision, not two. Value tools by the hours the planned job will need, not last year's hours.
-- [ ] **?** Credit: let people borrow for a tool and repay from the hours it saves. That's another way out of the trap, and a step towards banks.
+- [ ] **Credit** (saved for later): borrow for a tool and repay from the hours it saves.
+- [ ] **?** People with no spare hours still value a tool at nothing, because their last spare hour was worth nothing. With migration off, about a third of people stay unable to meet their needs for thousands of years. Is that the poverty trap we want, or should a person at the edge of hunger value saved hours *more*? Credit would also give them a way out.
 
 ## Quality of life
 
@@ -83,3 +77,4 @@ The early high ownership is a legacy of the start, when everyone farmed for them
 - **2026-10-18:** agreed click-to-expand for the chart, discoveries driven by learning by doing × spare time, a power law for every resource, and old constant improvement kept as an option. Still open: how experience counts, discoveries spreading between towns, and deposit depletion.
 - **2026-10-18:** sector hierarchy built and food renamed to wheat. Secondary work overtakes primary in year 84. New follow-ups noted under 1.
 - **2026-10-18:** lines moved to a separate people chart. Your long no-technology run exposed two flaws in how tools are replaced and taken up; written up under Model flaws, with three possible fixes to choose from.
+- **2026-10-18:** saving ahead and choosing jobs with their tools built. Iron ploughs now hold at about 70–87% instead of draining away. New open question on how the hungriest value tools.

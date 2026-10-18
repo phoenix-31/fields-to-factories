@@ -1,5 +1,22 @@
 # Changelog
 
+## Tools that last: saving ahead and choosing jobs with their tools
+
+### Fixed
+- **Tools could stay unfinished forever.** Saving towards a tool was tracked in fractions and only counted as done at exactly 100%. People who reached 99.99% got almost nothing from the last sliver, so they stopped and never received the tool. A tool now counts as paid for at 99%.
+- **Ploughs slowly disappeared in long runs.** Two flaws, found from a 7,600-year run without technology:
+  - **No saving ahead.** People only started paying for a replacement in the old tool's last year, and an iron plough costs more than most can spare in a year, so 94% went without one for a while. Owners now pay into a **sinking fund**: each tool remembers its lifetime, and by each year the owner aims to have saved a matching share of the next one.
+  - **Nobody new took up the plough.** Jobs were chosen with the tools people already owned, and tools were valued by last year's hours, so a non-farmer never valued a plough and a farmer without one never looked worthwhile. Job reviews now score each job **with its best tool**, minus the tool's price spread over its lifetime. Tools are valued by the hours the person's job will need, if that's more than last year's.
+
+### Added
+- Hover details show how much of the next tool each owner has saved.
+
+### Results
+- **Iron ploughs stay.** In the default run, ownership is 76% at year 100 and 69% at year 200, against 35% and 16% before. Wooden ploughs give way faster (1% at year 50, against 9%).
+- **No more drift without technology.** Over 3,000 years without improvement, iron-plough ownership rises from 59% to 87% and wheat farming holds at 38% of the day; before, ownership fell from 49% to 32% while farming rose from 45% to 53%.
+- **What each fix did** (1,000 years without technology, iron-plough ownership): before, 38%; rounding fix alone, 58%; with the sinking fund and job-based tool value, 75%; with jobs chosen with their tools as well, 78%. The job change matters most when people can't move: with migration off, it cuts the share who can't meet their needs from 46% to 37%.
+- Leisure is slightly higher and farming slightly lower throughout; the big picture (farming falling from 80% to 7% of the day over 200 years) is unchanged.
+
 ## Separate people chart
 
 ### Changed

@@ -618,9 +618,9 @@ fn hover_details(
                 let tools: Vec<String> = catalog
                     .goods
                     .iter()
-                    .zip(&p.tools.years_left)
-                    .filter(|(g, y)| g.is_tool() && **y > 0.0)
-                    .map(|(g, y)| format!("{} ({:.0} years left)", g.name, y))
+                    .zip(p.tools.years_left.iter().zip(&p.tools.progress))
+                    .filter(|(g, (y, _))| g.is_tool() && **y > 0.0)
+                    .map(|(g, (y, saved))| format!("{} ({:.0} years left, {:.0}% saved for the next)", g.name, y, saved * 100.0))
                     .collect();
                 if !tools.is_empty() {
                     ui.separator();

@@ -23,6 +23,7 @@ pub const POPULATION_ROWS: usize = map::ROWS;
 const INITIAL_HOUR_VALUE: f32 = 0.3;
 pub const DEFAULT_TRADE_COST: f32 = 0.3;
 const JOB_REVIEW_CHANCE: f32 = 0.2;
+const PAID_FOR: f32 = 0.99;
 const SEED: u64 = 42;
 pub const MAX_RATE: f32 = 20.0;
 
@@ -73,11 +74,12 @@ impl TimeUse {
 pub struct Tools {
     pub years_left: Vec<f32>,
     pub progress: Vec<f32>,
+    pub life: Vec<f32>,
 }
 
 impl Tools {
     fn new(goods: usize) -> Self {
-        Self { years_left: vec![0.0; goods], progress: vec![0.0; goods] }
+        Self { years_left: vec![0.0; goods], progress: vec![0.0; goods], life: vec![0.0; goods] }
     }
 
     pub fn owned(&self) -> Vec<f32> {
@@ -357,6 +359,7 @@ struct Situation<'a> {
     tools: &'a Tools,
     owned: &'a [f32],
     last_year: &'a TimeUse,
+    work_hours: f32,
     hour_value: f32,
     discount_rate: f32,
 }
@@ -368,24 +371,35 @@ fn tool_gain(p: &Situation, tool: GoodId, extra: f32, made: &[f32]) -> f32 {
     };
     let next: Vec<f32> = (0..catalog.len())
         .map(|t| {
-            let complete = p.tools.progress[t] + made[t] >= 1.0;
+            let complete = p.tools.progress[t] + made[t] >= PAID_FOR;
             if p.tools.years_left[t] > 1.0 || complete { 1.0 } else { 0.0 }
         })
         .collect();
-    let room = 1.0 - p.tools.progress[tool] - made[tool];
-    if next[tool] > 0.0 || room <= 0.0 {
+    let years_left = p.tools.years_left[tool];
+    let due = if years_left > 1.0 { 1.0 - (years_left - 1.0) / p.tools.life[tool].max(years_left) } else { 1.0 };
+    let room = due - p.tools.progress[tool] - made[tool];
+    if room <= 1.0 - PAID_FOR {
         return 0.0;
     }
-    let mut with_tool = next.clone();
+    let mut without = next.clone();
+    without[tool] = 0.0;
+    let mut with_tool = next;
     with_tool[tool] = 1.0;
+    let job_share = |good: GoodId| {
+        p.routes.job.map_or(0.0, |j| {
+            let flow = &p.routes.flows[j];
+            flow.hours[good] / flow.total_hours().max(1e-6)
+        })
+    };
     let saved: f32 = catalog
         .goods
         .iter()
         .enumerate()
         .filter(|(_, def)| def.recipe.tools.iter().any(|t| t.good == tool))
         .map(|(good, _)| {
-            p.last_year.hours[good] / catalog.hours_factor(good, p.owned)
-                * (catalog.hours_factor(good, &next) - catalog.hours_factor(good, &with_tool))
+            let hours = p.last_year.hours[good].max(p.work_hours * job_share(good));
+            hours / catalog.hours_factor(good, p.owned)
+                * (catalog.hours_factor(good, &without) - catalog.hours_factor(good, &with_tool))
         })
         .sum();
     saved * p.hour_value * annuity(lifetime.mean(), p.discount_rate) * extra.min(room)
@@ -524,7 +538,9 @@ fn allocate_time(
             let owned = tools.owned();
             let review = (rng.0.next_f32() < JOB_REVIEW_CHANCE).then(|| rng.0.next_f32());
             let access = markets.access(&catalog, home.town, home.distance);
-            let routes = plan_routes(&catalog, &access, &effective(&endowments.0, crowding.0), &owned, job.0, review);
+            let work_hours = time.hours.iter().sum::<f32>() + time.trading;
+            let routes =
+                plan_routes(&catalog, &access, &effective(&endowments.0, crowding.0), &owned, job.0, review, work_hours);
             job.0 = routes.job;
             let plan = plan_day(&Situation {
                 catalog: &catalog,
@@ -534,6 +550,7 @@ fn allocate_time(
                 tools: &tools,
                 owned: &owned,
                 last_year: &time,
+                work_hours,
                 hour_value: hour_value.0,
                 discount_rate: population.discount_rate,
             });
@@ -557,9 +574,10 @@ fn replace_tools(catalog: Res<Catalog>, mut people: Query<(&mut Tools, &mut Pers
         for (good, def) in catalog.goods.iter().enumerate() {
             let Some(lifetime) = def.lifetime else { continue };
             tools.years_left[good] = (tools.years_left[good] - 1.0).max(0.0);
-            if tools.years_left[good] <= 0.0 && tools.progress[good] >= 1.0 {
-                tools.progress[good] -= 1.0;
+            if tools.years_left[good] <= 0.0 && tools.progress[good] >= PAID_FOR {
+                tools.progress[good] = (tools.progress[good] - 1.0).max(0.0);
                 tools.years_left[good] = lifetime.draw(rng.0.next_f32()).round().max(1.0);
+                tools.life[good] = tools.years_left[good];
             }
             tools.progress[good] = tools.progress[good].min(1.0);
         }
@@ -600,18 +618,20 @@ fn migrate(
         &mut PersonRng,
         &Needs,
         &Tools,
+        &TimeUse,
     )>,
 ) {
     let rules = population.migration;
     let moved = std::sync::atomic::AtomicUsize::new(0);
-    people.par_iter_mut().for_each(|(mut person, mut home, mut endowments, mut moves, mut rng, needs, tools)| {
+    people.par_iter_mut().for_each(|(mut person, mut home, mut endowments, mut moves, mut rng, needs, tools, time)| {
         if rules.chance <= 0.0 || rng.0.next_f32() >= rules.chance {
             return;
         }
         let owned = tools.owned();
+        let work_hours = time.hours.iter().sum::<f32>() + time.trading;
         let score = |endowments: &[f32], town: usize, distance: f32| {
             let access = markets.access(&catalog, town, distance);
-            let routes = plan_routes(&catalog, &access, endowments, &owned, None, BEST_JOB);
+            let routes = plan_routes(&catalog, &access, endowments, &owned, None, BEST_JOB, work_hours);
             hours_for_needs(&catalog, &routes, &needs.0)
         };
         let spot_here = WorldMap::spot(person.x, person.y);
