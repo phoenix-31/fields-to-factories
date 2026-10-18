@@ -31,9 +31,12 @@ pub struct SimTick;
 
 #[derive(Component)]
 pub struct Person {
-    pub col: usize,
-    pub row: usize,
+    pub x: f32,
+    pub y: f32,
 }
+
+#[derive(Resource, Clone, Copy)]
+pub struct CountOverride(pub Option<usize>);
 
 #[derive(Component)]
 pub struct Home {
@@ -173,6 +176,7 @@ pub struct SimPlugin {
     pub people_path: PathBuf,
     pub map_path: PathBuf,
     pub trade_cost: f32,
+    pub count: Option<usize>,
 }
 
 impl Plugin for SimPlugin {
@@ -180,6 +184,7 @@ impl Plugin for SimPlugin {
         app.insert_resource(self.catalog.clone())
             .insert_resource(self.population.clone())
             .insert_resource(self.map.clone())
+            .insert_resource(CountOverride(self.count))
             .insert_resource(Definitions {
                 goods_path: self.goods_path.clone(),
                 people_path: self.people_path.clone(),
@@ -211,11 +216,15 @@ fn spawn_people(
     catalog: Res<Catalog>,
     population: Res<Population>,
     world_map: Res<WorldMap>,
+    count: Res<CountOverride>,
 ) {
     let n = catalog.len();
-    for row in 0..POPULATION_ROWS {
-        for col in 0..POPULATION_COLS {
-            let spot = row * POPULATION_COLS + col;
+    let people = count.0.unwrap_or_else(|| population.count.draw(rng.0.next_f32()).round() as usize).max(1);
+    for index in 0..people {
+        {
+            let (pick, jx, jy) = (rng.0.next_f32(), rng.0.next_f32(), rng.0.next_f32());
+            let (x, y) = world_map.settle(pick, jx, jy);
+            let spot = WorldMap::spot(x, y);
             let endowments: Vec<f32> = population
                 .endowments
                 .iter()
@@ -241,9 +250,9 @@ fn spawn_people(
                 })
                 .collect();
             let leisure = population.leisure.draw(rng.0.next_f32());
-            let (town, distance) = world_map.nearest_town((col as f32, row as f32));
+            let (town, distance) = world_map.nearest_town((x, y));
             commands.spawn((
-                (Person { col, row }, Home { town, distance }, Endowments(endowments), Needs(needs)),
+                (Person { x, y }, Home { town, distance }, Endowments(endowments), Needs(needs)),
                 Tastes { preferences, leisure },
                 Tools::new(n),
                 Trades { bought: vec![0.0; n], sold: vec![0.0; n] },
@@ -252,7 +261,7 @@ fn spawn_people(
                 TimeUse::new(n),
                 NeedsMet::default(),
                 HourValue(INITIAL_HOUR_VALUE),
-                PersonRng(Rng(SEED ^ (spot as u64).wrapping_mul(0xA24B_AED4_963E_E407))),
+                PersonRng(Rng(SEED ^ (index as u64).wrapping_mul(0xA24B_AED4_963E_E407))),
             ));
         }
     }

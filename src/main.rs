@@ -1,7 +1,7 @@
 //! `cargo run --release` opens the window; `-- --headless 300` prints 300 years as CSV.
 //! `--goods`, `--people` and `--map <file>` pick the definitions (default `goods.ron`, `people.ron`, `map.ron`);
 //! `--trade-cost <x>` sets the starting trade cost (0.3 = 30% of the price, paid in time);
-//! `--show-map` prints the terrain and towns as text.
+//! `--people-count <n>` overrides the number of people; `--show-map` prints the terrain and towns as text.
 
 mod goods;
 mod map;
@@ -33,7 +33,8 @@ fn main() {
         return;
     }
     let trade_cost = arg_after("--trade-cost").and_then(|s| s.parse().ok()).unwrap_or(sim::DEFAULT_TRADE_COST);
-    let sim = SimPlugin { catalog, population, map, goods_path, people_path, map_path, trade_cost };
+    let count = arg_after("--people-count").and_then(|s| s.parse().ok());
+    let sim = SimPlugin { catalog, population, map, goods_path, people_path, map_path, trade_cost, count };
 
     if args.iter().any(|a| a == "--headless") {
         let years = arg_after("--headless").and_then(|s| s.parse().ok()).unwrap_or(300);

@@ -1,10 +1,10 @@
 # Fields to Factories
 
-500 people live on a 25 × 20 map. Each splits a 16-hour waking day across the goods in an economy, trading at the nearest market town, plus leisure. Three data files define the world:
+About 1,500 people (you choose how many) are scattered over a 25 × 20 map, settling more densely on good farmland and near towns. Each splits a 16-hour waking day across the goods in an economy, trading at the nearest market town, plus leisure. Three data files define the world:
 
 - [`goods.ron`](goods.ron) holds facts about goods: what each one **provides** (food provides nourishment, clothing provides warmth, furniture provides comfort), how it's made, how fast its recipe improves, and how bulky it is to carry. Raw wool, wood and ore feed chains up to clothing, furniture and ploughs.
-- [`people.ron`](people.ron) holds what people **want**: needs and tastes, drawn per person from ranges, plus the range of quality for each resource.
-- [`map.ron`](map.ron) holds the **geography**: terrain that decides where land, pasture, forest and ore are good, the market towns, and the cost of carrying goods.
+- [`people.ron`](people.ron) holds **who** lives here and what they **want**: how many people, their needs and tastes (drawn per person from ranges), and the range of quality for each resource.
+- [`map.ron`](map.ron) holds the **geography**: terrain that decides where land, pasture, forest and ore are good, where people settle, the market towns, and the cost of carrying goods.
 
 People work out for themselves what any good is worth to them, including tools, which provide nothing directly but save hours. Every good can be made or bought, whichever costs that person fewer hours, so people with good land end up farming for others and people near rich ore end up mining.
 
@@ -16,7 +16,7 @@ hours farming ≈ nourishment needed ÷ (food per hour × tool boost)
 
 The need doesn't grow, so every gain in farm productivity frees hours for everything else. Better ploughs raise the tool boost, but an iron plough sits at the end of a chain: wood → charcoal, plus ore → iron, then iron + wood → plough. Trade lets each person take part in that chain at whichever step suits their land, forest and ore, as long as the trip to market is worth it.
 
-![The window at year 103, hovering over a carpenter near Crossways](screenshot.png)
+![The window at year 98 with 1,500 people, hovering over a carpenter near Rivermouth](screenshot.png)
 
 ## Run
 
@@ -26,6 +26,7 @@ cargo run --release -- --headless 300                 # 300 years as CSV on stdo
 cargo run --release -- --goods g.ron --people p.ron   # use other definitions (also --map)
 cargo run --release -- --show-map                     # print the terrain and towns as text
 cargo run --release -- --trade-cost 3 --headless 300  # start with a different trade cost
+cargo run --release -- --people-count 3000            # override the number of people
 ```
 
 The first build compiles Bevy and takes several minutes. On Linux you also need the usual Bevy system packages (`libudev-dev`, `libwayland-dev`, `libxkbcommon-dev`). See Bevy's [Linux dependencies](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md).
@@ -47,7 +48,7 @@ Each town has its own prices, measured in **hours of an average person's work**,
 
 **Merchants** link the towns. When one town has surplus and another a shortage, and the price gap is bigger than the cost of carrying the good between them, merchants ship it. Merchants' own time isn't yet counted in anyone's day.
 
-The markets don't clear exactly. Once they've formed, about 8–9% of trade by value finds no counterpart in a given year (four markets of about 125 people are lumpier than one of 500). Merchants absorb the gap, and prices move to close it. The panel shows this as "unmatched". In the first 10 years, while people are still joining, most trade is unmatched.
+The markets don't clear exactly. Once they've formed, about 5% of trade by value finds no counterpart in a given year. Smaller populations make it worse: with 500 people it was 8–9%, because each town's market was lumpier. Merchants absorb the gap, and prices move to close it. The panel shows this as "unmatched". In the first 10 years, while people are still joining, most trade is unmatched.
 
 ## The definitions
 
@@ -70,6 +71,7 @@ Edit any of them and press **Reset** in the app to reload all three without reco
 
 | Field | Meaning |
 |---|---|
+| `count` | How many people live on the map; a fixed number, or a range drawn once per Reset. Default 1500 |
 | `endowments` | Range of quality for each resource (`land`, `pasture`, `forest`, `ore`); where in the range a person falls depends on the terrain where they live. Must be above zero |
 | `needs` | Amount of a characteristic needed per day; met before anything else, in the order listed (nourishment, then warmth) |
 | `preferences` | Enjoyment beyond the need: `Log(weight)` is always wanted at a falling rate; `Saturating(weight, scale)` is wanted until about `scale` extra |
@@ -84,13 +86,14 @@ Edit any of them and press **Reset** in the app to reload all three without reco
 | `terrain` | Where each resource is best: `Low` (valleys), `Middle` (slopes), `High` (hills) or `Anywhere` |
 | `towns` | Market towns, by name and `(column, row)` from the top-left |
 | `travel_cost` | Hours to carry one unit of bulk one cell |
+| `settlement` | Where people choose to live: denser where the `follows` resource is good (`strength` 0 ignores it; higher crowds the best spots) and up to `1 + near_towns` times denser right beside a town |
 
-The loaders reject unknown goods, duplicate names, tools without a lifetime (or one under a year) or with a multiplier below 1, recipes that are inputs to themselves, wants no good provides, resources with no endowment, towns off the map, and terrain for resources no recipe uses.
+The loaders reject unknown goods, duplicate names, tools without a lifetime (or one under a year) or with a multiplier below 1, recipes that are inputs to themselves, wants no good provides, resources with no endowment, towns off the map, terrain or settlement for resources no recipe uses, and a count below 1.
 
 ## The window
 
 - **Top bar:** run or pause, step one year, simulation speed, reset (reloading the definition files), export CSV, and **How it works**, a short guide to the model.
-- **Map:** each square is one person. The key in its corner switches between **Each day** (a bar of their 16 waking hours, work at the bottom, leisure on top) and **Main work** (coloured by their biggest sector, like a land-use map), and opens a colour key. The ground shows terrain: yellow-green valleys, dark green forest, grey hills; diamonds are market towns. **Hover over anyone** to see their resources, town, job, wage, how they spent the day and which tools they own.
+- **Map:** each small mark is one person, placed where they live; several can share a cell. The key in its corner switches between **Each day** (a bar of their 16 waking hours, work at the bottom, leisure on top) and **Main work** (coloured by their biggest sector, like a land-use map), and opens a colour key. The ground shows terrain: yellow-green valleys, dark green forest, grey hills; diamonds are market towns. **Hover over anyone** to ring them and see their resources, town, job, wage, how they spent the day and which tools they own.
 - **Side panel tabs.** Hover over almost anything for an explanation.
   - **Overview:** headline numbers (farming, leisure, needs unmet, specialisation, work sold, time trading and carrying), the "Where the day goes" chart, and "Why farming shrinks", the core equation with today's numbers.
   - **Production:** the production tree with prices in a chosen town, and how many people own each tool.
@@ -100,14 +103,16 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
 ## Things to try
 
 - **Switch the map to "Main work".** By year 100 the fertile valley round Rivermouth farms, the sheep hills round Westmoor have become a textile district (wool, cloth, tailoring), and carpenters cluster on the forested slopes near their wood. Nothing places them; it's where their resources are.
-- **Compare food prices on the Towns tab.** At year 100 food costs about 1.3 hours of work in valley Rivermouth and about 1.9 in the hill towns: the price of carrying it uphill.
-- **Watch the hills go hungry, then recover.** Hill farmland is poor, so 42% of people start out unable to meet their needs. Trade lets them sell wool, wood or furniture and buy food:
+- **Compare food prices and populations on the Towns tab.** The valley town Rivermouth has the most people (about 470 of 1,500), and at year 100 food costs about 1.2 hours of work there against 1.7–1.9 in the hill towns: the price of carrying it uphill.
+- **Watch the hills go hungry, then recover.** Hill farmland is poor, so about 36% of people start out unable to meet their needs. Trade lets them sell wool, wood or furniture and buy food:
 
   | Needs unmet | Year 10 | Year 20 | Year 30 |
   |---|---|---|---|
-  | Cheap trade (5%) | 20% | 2% | 0% |
-  | Default (30%) | 25% | 4% | 0% |
-  | No trade (300%) | 25% | 13% | 8% |
+  | Cheap trade (5%) | 16% | 1% | 0% |
+  | Default (30%) | 19% | 3% | 0% |
+  | No trade (300%) | 20% | 10% | 6% |
+- **Change the population.** Set `count` in `people.ron` (or run with `--people-count`) and press Reset. Bigger populations give each town a deeper market; try 500 against 3000 and compare unmatched trade.
+- **Change where people settle.** In `map.ron`, raise `settlement.strength` to crowd everyone into the valleys and empty the hills, or set it to 0 to spread people evenly.
 
 - **Raise the carrying cost.** Trade shrinks, prices drift further apart between towns, and the regions become more self-sufficient.
 - **Move or add a town in `map.ron`,** then press Reset. Put one deep in the western hills and see whether the textile district moves with it.

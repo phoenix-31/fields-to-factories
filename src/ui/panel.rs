@@ -108,8 +108,12 @@ pub(super) fn layout(
         && !key.contains(pointer)
         && !(view.state.help && ctx.is_pointer_over_egui())
     {
-        if let Ok(world) = camera.0.viewport_to_world_2d(camera.1, Vec2::new(pointer.x, pointer.y)) {
-            hover_details(&ctx, pointer, world, &model, &people);
+        if let Ok(world) = camera.0.viewport_to_world_2d(camera.1, Vec2::new(pointer.x, pointer.y))
+            && let Some(at) = hover_details(&ctx, pointer, world, &model, &people)
+            && let Ok(mark) = camera.0.world_to_viewport(camera.1, at.extend(0.0))
+        {
+            ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, "hovered".into()))
+                .circle_stroke(egui::pos2(mark.x, mark.y), 9.0, egui::Stroke::new(2.0, egui::Color32::WHITE));
         }
     }
     Ok(())
@@ -210,9 +214,12 @@ fn stat(ui: &mut egui::Ui, value: String, label: &str, tip: &str) {
 fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>) {
     note(
         ui,
-        "500 people on a map split their 16 waking hours between making things, trading, and \
-         leisure. As tools and technology improve, farming takes less of the day; the question \
-         is where the freed time goes.",
+        &format!(
+            "{} people scattered over a map split their 16 waking hours between making things, \
+             trading, and leisure. As tools and technology improve, farming takes less of the day; \
+             the question is where the freed time goes.",
+            people.iter().count()
+        ),
     );
     ui.add_space(6.0);
     let Some(last) = model.history.0.last() else {
@@ -425,6 +432,14 @@ fn settings(ui: &mut egui::Ui, commands: &mut Commands, model: &mut Model) {
     }
 
     ui.add_space(10.0);
+    ui.heading("People");
+    note(
+        ui,
+        "How many people there are, and where they settle, is set in people.ron (count) and map.ron \
+         (settlement). Changes apply on Reset; --people-count overrides the count from the command line.",
+    );
+
+    ui.add_space(10.0);
     ui.heading("Definition files");
     note(ui, "Edit these and press Reset to reload them without recompiling.");
     for (path, what) in [
@@ -473,20 +488,26 @@ fn map_key(ctx: &egui::Context, map_rect: egui::Rect, catalog: &Catalog, map_vie
         .rect
 }
 
-fn hover_details(ctx: &egui::Context, pointer: egui::Pos2, world: Vec2, model: &Model, people: &Query<PersonView>) {
+fn hover_details(
+    ctx: &egui::Context,
+    pointer: egui::Pos2,
+    world: Vec2,
+    model: &Model,
+    people: &Query<PersonView>,
+) -> Option<Vec2> {
     let pitch = CELL + GAP;
-    let col = (world.x / pitch + (POPULATION_COLS as f32 - 1.0) / 2.0).round();
-    let row = ((POPULATION_ROWS as f32 - 1.0) / 2.0 - world.y / pitch).round();
-    if col < 0.0 || row < 0.0 || col >= POPULATION_COLS as f32 || row >= POPULATION_ROWS as f32 {
-        return;
-    }
-    let (col, row) = (col as usize, row as usize);
-    let Some(p) = people.iter().find(|p| p.person.col == col && p.person.row == row) else {
-        return;
-    };
+    let x = world.x / pitch + (POPULATION_COLS as f32 - 1.0) / 2.0;
+    let y = (POPULATION_ROWS as f32 - 1.0) / 2.0 - world.y / pitch;
+    let p = people
+        .iter()
+        .map(|p| (p.person.x - x).powi(2) + (p.person.y - y).powi(2))
+        .zip(people.iter())
+        .filter(|(d, _)| *d < 0.4)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, p)| p)?;
     let catalog = &model.catalog;
     if p.time.hours.len() != catalog.len() {
-        return;
+        return None;
     }
     egui::Area::new("person".into())
         .fixed_pos(pointer + egui::vec2(18.0, 18.0))
@@ -496,7 +517,7 @@ fn hover_details(ctx: &egui::Context, pointer: egui::Pos2, world: Vec2, model: &
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.set_max_width(280.0);
                 let town = model.markets.towns.get(p.home.town).map_or("?", |t| t.name.as_str());
-                ui.label(egui::RichText::new(format!("Person at column {col}, row {row}")).strong());
+                ui.label(egui::RichText::new(format!("Person at {:.1}, {:.1}", p.person.x, p.person.y)).strong());
                 ui.label(format!("Trades at {town}, {:.1} cells away", p.home.distance));
                 let resources: Vec<String> = catalog
                     .resources
@@ -543,6 +564,7 @@ fn hover_details(ctx: &egui::Context, pointer: egui::Pos2, world: Vec2, model: &
                 }
             });
         });
+    Some(super::map_position(p.person.x, p.person.y))
 }
 
 fn how_it_works(ctx: &egui::Context, open: &mut bool) {
@@ -576,10 +598,11 @@ fn how_it_works(ctx: &egui::Context, open: &mut bool) {
                 ui.add_space(6.0);
                 ui.heading("Reading the map");
                 ui.label(
-                    "Each square is one person. In \"Each day\" view, their bar shows how they spend 16 \
-                     waking hours, work at the bottom and leisure at the top. In \"Main work\" view, the \
-                     square takes the colour of their biggest sector, so regions stand out. Hover over \
-                     anyone for details.",
+                    "Each small mark is one person, placed where they live; people settle more densely \
+                     on good farmland and near towns. In \"Each day\" view, their mark is a bar of their 16 \
+                     waking hours, work at the bottom and leisure at the top. In \"Main work\" view, it \
+                     takes the colour of their biggest sector, so regions stand out. Hover over anyone \
+                     for details.",
                 );
                 ui.add_space(6.0);
                 ui.heading("Changing the world");

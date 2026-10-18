@@ -6,10 +6,13 @@
 //                 Log(weight)               always wanted, each extra unit worth a bit less
 //                 Saturating(weight, scale) wanted until about `scale` extra, then barely
 // leisure       weight on free time (Log)
-// endowments    quality of each resource a person has access to; recipes that use it scale with it
+// count         how many people live on the map (a range is drawn once per Reset)
+// endowments    range of quality for each resource; where a person falls in it depends on the terrain
+//               where they live (see map.ron)
 // discount_rate how much less next year matters; with wear, sets how far ahead tools are valued
 
 (
+    count: 1500,
     endowments: [
         ("land", (0.3, 1.7)),
         ("pasture", (0.3, 1.7)),

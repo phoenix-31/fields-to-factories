@@ -6,7 +6,11 @@
 // terrain       where each resource is best: Low (valleys), Middle (slopes), High (hills), Anywhere
 // towns         market towns; everyone trades at the nearest one
 // travel_cost   hours to carry one unit of bulk one cell (see bulk in goods.ron)
+// settlement    where people choose to live: denser where `follows` is good (strength 0 = ignore it,
+//               higher = more crowded on the best spots), and up to 1 + near_towns times denser
+//               right beside a town, fading over a few cells
 
+#![enable(implicit_some)]
 (
     seed: 7,
     feature_size: 8.0,
@@ -23,4 +27,5 @@
         (name: "Westmoor", at: (2, 8)),
     ],
     travel_cost: 0.02,
+    settlement: (follows: "land", strength: 0.5, near_towns: 1.5),
 )

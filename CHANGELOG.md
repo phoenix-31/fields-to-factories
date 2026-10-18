@@ -1,5 +1,18 @@
 # Changelog
 
+## Free settlement and a bigger population
+
+### Changed
+- **People aren't tied to grid cells.** Each person gets a random position anywhere on the map, chosen once at the start (or on Reset). Several people can share a cell, and some cells are empty.
+- **Settlement follows the land.** A new `settlement` section in `map.ron` makes people more likely to live where farmland is good and near towns. The default (`strength: 0.5`, `near_towns: 1.5`) puts about 470 of 1,500 people round valley Rivermouth and 310–370 round each hill town.
+- **The population is configurable,** via `count` in `people.ron` (a number or a range), and the default rose from 500 to 1,500. `--people-count` overrides it.
+- **The map draws each person as a small mark** at their position. Hovering finds the nearest person and rings them.
+
+### Results
+- **Unmatched trade fell** from 8–9% to about 5% a year: deeper town markets are less lumpy.
+- A 300-year headless run takes about 12 seconds with 1,500 people (about 40 ms a year on four cores).
+- Strong settlement preferences matter: at `strength: 2` the western hills almost emptied and their textile trade disappeared.
+
 ## UI clean-up
 
 ### Changed

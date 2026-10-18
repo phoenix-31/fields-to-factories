@@ -15,7 +15,8 @@ use crate::sim::*;
 
 const PANEL_WIDTH: f32 = 460.0;
 const CELL: f32 = 22.0;
-const BAR_WIDTH: f32 = 14.0;
+const MARK_WIDTH: f32 = 6.0;
+const MARK_HEIGHT: f32 = 13.0;
 const GAP: f32 = 6.0;
 
 const LEISURE_COLOR: [u8; 3] = [78, 140, 230];
@@ -85,10 +86,14 @@ enum DaySegment {
 }
 
 fn cell_position(col: usize, row: usize) -> Vec2 {
+    map_position(col as f32, row as f32)
+}
+
+fn map_position(x: f32, y: f32) -> Vec2 {
     let pitch = CELL + GAP;
     Vec2::new(
-        (col as f32 - (POPULATION_COLS as f32 - 1.0) / 2.0) * pitch,
-        ((POPULATION_ROWS as f32 - 1.0) / 2.0 - row as f32) * pitch,
+        (x - (POPULATION_COLS as f32 - 1.0) / 2.0) * pitch,
+        ((POPULATION_ROWS as f32 - 1.0) / 2.0 - y) * pitch,
     )
 }
 
@@ -145,10 +150,10 @@ fn rebuild_bars(
         ));
     }
     for (entity, person) in &people {
-        let pos = cell_position(person.col, person.row);
+        let pos = map_position(person.x, person.y);
         commands
             .entity(entity)
-            .insert((Transform::from_translation(pos.extend(0.0)), Visibility::default()))
+            .insert((Transform::from_translation(pos.extend(person.y * 0.01)), Visibility::default()))
             .despawn_related::<Children>()
             .with_children(|bar| {
                 let segments = (0..catalog.len()).map(DaySegment::Good).chain([DaySegment::Trading, DaySegment::Leisure]);
@@ -200,7 +205,7 @@ fn draw_days(
             let main = (0..time.hours.len()).max_by(|&a, &b| time.hours[a].total_cmp(&time.hours[b]));
             let shown = matches!(*segment, DaySegment::Good(g) if Some(g) == main);
             let color = main.map_or(LEISURE_COLOR, |g| catalog.goods[g].color);
-            let size = if shown { Vec2::splat(CELL) } else { Vec2::ZERO };
+            let size = if shown { Vec2::splat(MARK_WIDTH + 2.0) } else { Vec2::ZERO };
             sprite.custom_size = Some(size);
             sprite.color = srgb(color);
             transform.translation.y = 0.0;
@@ -220,9 +225,9 @@ fn draw_days(
             DaySegment::Trading => (worked, time.trading, TRADING_COLOR),
             DaySegment::Leisure => (worked + time.trading, time.leisure, LEISURE_COLOR),
         };
-        let height = CELL * hours / WAKING_HOURS;
-        let bottom = -CELL / 2.0 + CELL * below / WAKING_HOURS;
-        sprite.custom_size = Some(Vec2::new(BAR_WIDTH, height));
+        let height = MARK_HEIGHT * hours / WAKING_HOURS;
+        let bottom = -MARK_HEIGHT / 2.0 + MARK_HEIGHT * below / WAKING_HOURS;
+        sprite.custom_size = Some(Vec2::new(MARK_WIDTH, height));
         sprite.color = srgb(color);
         transform.translation.y = bottom + height / 2.0;
     }

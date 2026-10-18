@@ -60,6 +60,7 @@ impl Taste {
 
 #[derive(Resource, Clone)]
 pub struct Population {
+    pub count: Spread,
     pub endowments: Vec<Spread>,
     pub leisure: Spread,
     pub discount_rate: f32,
@@ -69,6 +70,8 @@ pub struct Population {
 
 #[derive(Deserialize)]
 struct PopulationDef {
+    #[serde(default = "default_count")]
+    count: Spread,
     endowments: Vec<(String, Spread)>,
     leisure: Spread,
     discount_rate: f32,
@@ -86,6 +89,10 @@ struct NeedDef {
 struct PreferenceDef {
     of: String,
     curve: Curve,
+}
+
+fn default_count() -> Spread {
+    Spread::Fixed(1500.0)
 }
 
 impl Population {
@@ -116,7 +123,11 @@ impl Population {
         if let Some(i) = endowments.iter().position(|e| e.min() <= 0.0) {
             return Err(format!("endowment \"{}\" must be above zero", catalog.resources[i]));
         }
+        if def.count.min() < 1.0 {
+            return Err("count must be at least 1".into());
+        }
         Ok(Self {
+            count: def.count,
             endowments,
             leisure: def.leisure,
             discount_rate: def.discount_rate,

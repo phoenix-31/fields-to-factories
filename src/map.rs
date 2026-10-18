@@ -24,6 +24,19 @@ pub struct TownDef {
     pub at: (usize, usize),
 }
 
+#[derive(Clone, Deserialize)]
+pub struct Settlement {
+    follows: Option<String>,
+    strength: f32,
+    near_towns: f32,
+}
+
+impl Default for Settlement {
+    fn default() -> Self {
+        Self { follows: None, strength: 0.0, near_towns: 0.0 }
+    }
+}
+
 #[derive(Deserialize)]
 struct MapDef {
     seed: u64,
@@ -31,6 +44,8 @@ struct MapDef {
     terrain: Vec<(String, Terrain)>,
     towns: Vec<TownDef>,
     travel_cost: f32,
+    #[serde(default)]
+    settlement: Settlement,
 }
 
 #[derive(Resource, Clone)]
@@ -39,6 +54,7 @@ pub struct WorldMap {
     pub travel_cost: f32,
     pub elevation: Vec<f32>,
     pub fields: Vec<Vec<f32>>,
+    settle_weights: Vec<f32>,
 }
 
 impl WorldMap {
@@ -63,6 +79,12 @@ impl WorldMap {
         }
         if let Some((name, _)) = def.terrain.iter().find(|(name, _)| !catalog.resources.contains(name)) {
             return Err(format!("terrain names \"{name}\", which no recipe uses"));
+        }
+        if let Some(name) = def.settlement.follows.as_ref().filter(|n| !catalog.resources.contains(n)) {
+            return Err(format!("settlement follows \"{name}\", which no recipe uses"));
+        }
+        if def.settlement.strength < 0.0 || def.settlement.near_towns < 0.0 {
+            return Err("settlement strength and near_towns can't be negative".into());
         }
         if def.feature_size < 1.0 {
             return Err("feature_size must be at least 1".into());
@@ -95,7 +117,17 @@ impl WorldMap {
                 normalise(shaped.collect())
             })
             .collect();
-        Ok(Self { towns: def.towns, travel_cost: def.travel_cost, elevation, fields })
+        let mut map = Self { towns: def.towns, travel_cost: def.travel_cost, elevation, fields, settle_weights: Vec::new() };
+        let follows = def.settlement.follows.as_ref().and_then(|n| catalog.resources.iter().position(|r| r == n));
+        map.settle_weights = (0..ROWS * COLS)
+            .map(|spot| {
+                let at = ((spot % COLS) as f32, (spot / COLS) as f32);
+                let quality = follows.map_or(1.0, |r| (0.1 + map.fields[r][spot]).powf(def.settlement.strength));
+                let pull = 1.0 + def.settlement.near_towns * (-map.nearest_town(at).1 / 3.0).exp();
+                quality * pull
+            })
+            .collect();
+        Ok(map)
     }
 
     pub fn distance(a: (f32, f32), b: (f32, f32)) -> f32 {
@@ -105,6 +137,27 @@ impl WorldMap {
     pub fn town_at(&self, town: usize) -> (f32, f32) {
         let (x, y) = self.towns[town].at;
         (x as f32, y as f32)
+    }
+
+    pub fn spot(x: f32, y: f32) -> usize {
+        let col = (x.round() as usize).min(COLS - 1);
+        let row = (y.round() as usize).min(ROWS - 1);
+        row * COLS + col
+    }
+
+    pub fn settle(&self, pick: f32, jitter_x: f32, jitter_y: f32) -> (f32, f32) {
+        let total: f32 = self.settle_weights.iter().sum();
+        let mut target = pick * total;
+        let spot = self
+            .settle_weights
+            .iter()
+            .position(|&w| {
+                target -= w;
+                target <= 0.0
+            })
+            .unwrap_or(self.settle_weights.len() - 1);
+        let (col, row) = ((spot % COLS) as f32, (spot / COLS) as f32);
+        ((col + jitter_x - 0.5).clamp(0.0, (COLS - 1) as f32), (row + jitter_y - 0.5).clamp(0.0, (ROWS - 1) as f32))
     }
 
     pub fn render(&self, catalog: &Catalog) -> String {
