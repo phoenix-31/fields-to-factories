@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContext, EguiContexts, egui};
 
-use super::charts::{production_tree, sector_legend, stacked_chart};
+use super::charts::{people_chart, production_tree, sector_legend, stacked_chart};
 use super::{
     CELL, Expanded, GAP, HUNGRY_COLOR, LEISURE_COLOR, MapView, PANEL_WIDTH, ShownTown, SimSpeed, TRADING_COLOR, color32,
     lighten, swatch,
@@ -269,9 +269,14 @@ fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>, expand
     note(
         ui,
         "Everyone's waking hours, stacked to 100%. Click a band to split it into its parts, and a part to \
-         group it again. Lines show tool ownership, needs unmet and specialisation.",
+         group it again.",
     );
     stacked_chart(ui, &model.catalog, &model.history, expanded);
+
+    ui.add_space(10.0);
+    ui.heading("How people are doing");
+    note(ui, "Shares of people: those who can't meet their needs, and those owning each tool. Specialisation is the share of a person's work in their biggest sector, on average.");
+    people_chart(ui, &model.catalog, &model.history);
 
     ui.add_space(6.0);
     egui::CollapsingHeader::new("Why farming shrinks").show(ui, |ui| farming_equation(ui, model, people));

@@ -1,5 +1,11 @@
 # Changelog
 
+## Separate people chart
+
+### Changed
+- **The hours chart shows only hours.** The needs-unmet, tool-ownership and specialisation lines moved to a new **How people are doing** chart below it, since they measure shares of people rather than shares of the day. Hovering over a line reads off its value.
+- The year axis labels stretch to runs of thousands of years.
+
 ## Sector hierarchy
 
 ### Changed

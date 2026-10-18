@@ -172,56 +172,12 @@ pub(super) fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &Hist
         bands.iter().find(|b| b.lower.get(i).is_some_and(|&l| l <= y) && b.upper.get(i).is_some_and(|&u| y < u)).map(|b| (b, i))
     };
 
-    let hungry: PlotPoints = samples
-        .iter()
-        .map(|s| [s.year as f64, s.hungry_share as f64 * 100.0])
-        .collect();
-    let specialisation: PlotPoints = samples
-        .iter()
-        .map(|s| [s.year as f64, s.specialisation as f64 * 100.0])
-        .collect();
-    let coverage: Vec<(String, [u8; 3], PlotPoints)> = catalog
-        .goods
-        .iter()
-        .enumerate()
-        .filter(|(_, g)| g.is_tool())
-        .map(|(id, g)| {
-            let points = samples
-                .iter()
-                .map(|s| [s.year as f64, s.coverage.get(id).copied().unwrap_or(0.0) as f64 * 100.0])
-                .collect();
-            (format!("% with a {}", g.name), lighten(g.color), points)
-        })
-        .collect();
-    let lines: Vec<String> = ["needs unmet (% of people)".to_string(), "specialisation (%)".to_string()]
-        .into_iter()
-        .chain(coverage.iter().map(|c| c.0.clone()))
-        .collect();
-
-    let plot = Plot::new("time_use")
+    let plot = year_plot("time_use", "% of waking hours")
         .height(260.0)
-        .include_y(0.0)
-        .include_y(100.0)
-        .include_x(0.0)
-        .allow_drag(false)
-        .allow_zoom(false)
-        .allow_scroll(false)
-        .allow_double_click_reset(false)
-        .x_axis_label("year")
-        .x_grid_spacer(egui_plot::uniform_grid_spacer(|input| {
-            let span = input.bounds.1 - input.bounds.0;
-            let step = [10.0, 20.0, 50.0, 100.0].into_iter().find(|s| span / s <= 8.0).unwrap_or(200.0);
-            [step / 5.0, step, step * 5.0]
-        }))
-        .y_axis_label("% of waking hours")
         .label_formatter(|hover| {
-            let (name, position) = match hover {
-                HoverPosition::NearDataPoint { plot_name, position, .. } => (Some(*plot_name), *position),
-                HoverPosition::Elsewhere { position } => (None, *position),
+            let position = match hover {
+                HoverPosition::NearDataPoint { position, .. } | HoverPosition::Elsewhere { position } => *position,
             };
-            if let Some(name) = name.filter(|n| lines.iter().any(|l| l == n)) {
-                return Some(format!("{name}\n{:.0}% in year {:.0}", position.y, position.x));
-            }
             let (band, i) = band_at(position.x, position.y)?;
             let hint = match band.sector.map(|s| &catalog.sectors[s]) {
                 Some(s) if !s.children.is_empty() => "\nclick to split it up",
@@ -234,16 +190,6 @@ pub(super) fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &Hist
             for band in &bands {
                 plot.add(FilledArea::new(band.name.clone(), &xs, &band.lower, &band.upper).fill_color(color32(band.color)));
             }
-            plot.line(Line::new(lines[0].clone(), hungry).color(color32(HUNGRY_COLOR)).width(2.0));
-            for (name, color, points) in coverage {
-                plot.line(Line::new(name, points).color(color32(color)).width(2.0));
-            }
-            plot.line(
-                Line::new(lines[1].clone(), specialisation)
-                    .color(color32(SPECIALISATION_COLOR))
-                    .style(egui_plot::LineStyle::dashed_loose())
-                    .width(2.0),
-            );
         });
     if plot.response.clicked()
         && let Some(pointer) = plot.response.interact_pointer_pos()
@@ -262,9 +208,64 @@ pub(super) fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &Hist
         sector_legend(ui, catalog, expanded);
         swatch(ui, TRADING_COLOR, "trading & carrying");
         swatch(ui, LEISURE_COLOR, "leisure");
-        swatch(ui, HUNGRY_COLOR, "needs unmet");
-        swatch(ui, SPECIALISATION_COLOR, "specialisation (dashed)");
     });
+}
+
+pub(super) fn people_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
+    let samples = &history.0;
+    let series = |value: &dyn Fn(&crate::sim::Sample) -> f32| -> PlotPoints {
+        samples.iter().map(|s| [s.year as f64, value(s) as f64 * 100.0]).collect()
+    };
+    let mut lines: Vec<(String, [u8; 3], PlotPoints, bool)> = vec![
+        ("needs unmet".into(), HUNGRY_COLOR, series(&|s| s.hungry_share), false),
+        ("specialisation".into(), SPECIALISATION_COLOR, series(&|s| s.specialisation), true),
+    ];
+    for (id, good) in catalog.goods.iter().enumerate().filter(|(_, g)| g.is_tool()) {
+        let article = if good.name.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+        lines.push((format!("own {article} {}", good.name), lighten(good.color), series(&|s| s.coverage.get(id).copied().unwrap_or(0.0)), false));
+    }
+    let names: Vec<(String, [u8; 3], bool)> = lines.iter().map(|l| (l.0.clone(), l.1, l.3)).collect();
+    year_plot("people", "% of people")
+        .height(180.0)
+        .label_formatter(|hover| match hover {
+            HoverPosition::NearDataPoint { plot_name, position, .. } => {
+                Some(format!("{plot_name}\n{:.0}% in year {:.0}", position.y, position.x))
+            }
+            HoverPosition::Elsewhere { .. } => None,
+        })
+        .show(ui, |plot| {
+            for (name, color, points, dashed) in lines {
+                let line = Line::new(name, points).color(color32(color)).width(2.0);
+                plot.line(if dashed { line.style(egui_plot::LineStyle::dashed_loose()) } else { line });
+            }
+        });
+    ui.horizontal_wrapped(|ui| {
+        for (name, color, dashed) in &names {
+            swatch(ui, *color, &if *dashed { format!("{name} (dashed)") } else { name.clone() });
+        }
+    });
+}
+
+fn year_plot<'a>(id: &str, y_label: &str) -> Plot<'a> {
+    Plot::new(id)
+        .height(240.0)
+        .include_y(0.0)
+        .include_y(100.0)
+        .include_x(0.0)
+        .allow_drag(false)
+        .allow_zoom(false)
+        .allow_scroll(false)
+        .allow_double_click_reset(false)
+        .x_axis_label("year")
+        .x_grid_spacer(egui_plot::uniform_grid_spacer(|input| {
+            let span = input.bounds.1 - input.bounds.0;
+            let step = [10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0]
+                .into_iter()
+                .find(|s| span / s <= 8.0)
+                .unwrap_or(2000.0);
+            [step / 5.0, step, step * 5.0]
+        }))
+        .y_axis_label(y_label.to_string())
 }
 
 pub(super) fn sector_legend(ui: &mut egui::Ui, catalog: &Catalog, expanded: &mut Expanded) {
