@@ -94,12 +94,20 @@ Things any option needs: stable market ids, a CSV and Towns tab that cope with m
 
 ## Next: births and deaths
 
-Chosen as the next stage. Start from a smaller population and let it grow, with hunger carrying real risk.
+Chosen as the next stage. Agreed design:
 
-- **?** What sets births and deaths: a base rate each, with births rising and deaths falling as people meet their needs and have spare time?
-- **?** Ages: do people have an age (children who don't work yet, old age), or is each person simply a working adult who can die or have a child?
-- **?** What a child gets: born next to a parent, with tastes drawn fresh or near the parent's, and does it inherit tools when the parent dies?
-- **?** Starting size, and whether land limits growth through crowding alone (a Malthusian ceiling) or something else.
+- **Start with about 300 people** and let the population grow into the land.
+- **Living standards drive both.** Each year a base chance of each. Going short of food raises the chance of dying; meeting needs with spare time raises the chance of a birth. Crowding thins resources as numbers grow, so growth slows on its own (a Malthusian ceiling).
+- **Ages:** childhood, working life, old age. Children don't work and must be fed by a parent: their needs are added to the parent's. Adults work. The old work fewer hours, and their chance of dying rises with age.
+- **A newborn** is born beside a parent, with tastes drawn close to the parent's, and becomes an independent adult with their own job when grown.
+- **Inheritance:** when a parent dies, their tools and savings pass to a child, so wealth can build up in families.
+
+Still to settle while building:
+
+- **?** How much a child costs: a fraction of an adult's needs, rising with age?
+- **?** No sexes or couples for now: each adult can have a child. OK?
+- **?** Who inherits: the eldest living child, or split between children?
+- Needs a seed source for newborns that keeps runs repeatable, plus a population line, births and deaths per year, and an age chart in the UI and CSV.
 
 ## Ideas, not yet planned
 
@@ -120,3 +128,4 @@ Chosen as the next stage. Start from a smaller population and let it grow, with 
 - **2026-10-18:** steady technological progress removed; the economy now settles by year 50. Found that iron-plough ownership tracks who grows their own wheat; noted ploughing-as-a-service and births and deaths under ideas.
 - **2026-10-18:** 34 tests added and the old lint warnings fixed. Refactors flagged, each tied to the feature that needs it. Emergent markets written up with three options.
 - **2026-10-18:** chose emergent market towns, and births and deaths as the next stage. Split `sim.rs` and added `new_person` in preparation. Open questions on births and deaths written up.
+- **2026-10-18:** births and deaths designed: start at 300, living standards drive births and deaths, ages with dependent children, newborns beside a parent with similar tastes, and inheritance of tools.
