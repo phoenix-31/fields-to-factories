@@ -447,6 +447,16 @@ fn plan_day(p: &Situation) -> DayPlan {
         }
     };
 
+    let short = hours_for_needs(catalog, p.routes, &p.needs.0) > WAKING_HOURS;
+    let best_tool = |plan: &DayPlan| {
+        (0..n)
+            .filter(|&t| catalog.goods[t].is_tool() && unit_hours[t].is_finite())
+            .map(|t| (t, tool_gain(p, t, SLICE / unit_hours[t], &plan.made)))
+            .filter(|&(_, gain)| gain > p.hour_value * SLICE)
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(t, _)| t)
+    };
+
     let mut slices = SLICES;
     for &(c, amount) in &p.needs.0 {
         let cheapest = (0..n)
@@ -456,7 +466,8 @@ fn plan_day(p: &Situation) -> DayPlan {
             });
         let Some(good) = cheapest else { continue };
         while slices > 0 && amounts[c] < amount {
-            work(good, &mut plan, &mut amounts);
+            let next = if short { best_tool(&plan).unwrap_or(good) } else { good };
+            work(next, &mut plan, &mut amounts);
             slices -= 1;
         }
     }
@@ -485,7 +496,11 @@ fn plan_day(p: &Situation) -> DayPlan {
     }
 
     plan.needs_met = p.needs.0.iter().map(|&(c, amount)| amounts[c] / amount).fold(1.0, f32::min);
-    plan.hour_value = marginal / SLICE;
+    plan.hour_value = if plan.needs_met < 0.999 {
+        leisure_value(p.tastes, SLICE) / SLICE / plan.needs_met.max(0.1)
+    } else {
+        marginal / SLICE
+    };
     plan
 }
 

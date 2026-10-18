@@ -33,9 +33,9 @@ The first build compiles Bevy and takes several minutes. On Linux you also need 
 
 ## How people decide
 
-1. **Needs first.** For each need, a person works on the cheapest good that provides it until the need is met, or the day runs out.
+1. **Needs first.** For each need, a person works on the cheapest good that provides it until the need is met, or the day runs out. The exception is someone who can't meet their needs even working all day: they put hours into a tool instead whenever it would save more hours over its life than it costs.
 2. **Spare hours follow their own tastes,** a quarter-hour at a time: more of what they enjoy, leisure, or tools.
-3. **Tools are valued by the hours they save.** A plough is worth the farming hours it saves each year, priced at what a spare hour was worth to that person last year, over the plough's discounted lifetime. The farming hours are last year's, or what their job will need if that's more, so someone who has just become a farmer values a plough properly. Someone with no spare hours values a plough at nothing, so the poorest can't invest.
+3. **Tools are valued by the hours they save.** A plough is worth the farming hours it saves each year, priced at what a spare hour was worth to that person last year, over the plough's discounted lifetime. The farming hours are last year's, or what their job will need if that's more, so someone who has just become a farmer values a plough properly. Someone who can't meet their needs values an hour more than anyone: at least what their first hour of rest would be worth, and more the further short they fall.
 4. **Tools are whole and wear out at random.** A new tool lasts a number of years drawn from its `lifetime` range, then breaks and must be replaced. Hours put towards a tool build up as progress (or savings, if buying) until there's a whole one. Owners save for the next one over the old one's life, a share each year (a sinking fund), so it's paid for when the old one breaks. A farmer works with the best tool they own, so an iron plough makes a wooden one pointless.
 5. **Make or buy.** For each good, and each input, a person compares making it with earning the money at their job and buying it. Buying also costs time at market: the trade cost, a share of the price. Hours spent making inputs count in those sectors, and hours spent earning count in the job's sectors.
 6. **Gradual choices.** The cheaper buying is compared with making, the larger the share of a good a person buys, rather than everyone flipping at once.
@@ -109,18 +109,18 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
 ## Things to try
 
 - **Switch the map to "Main work".** By year 100 the fertile valley round Rivermouth farms, the sheep hills round Westmoor have become a textile district (wool, cloth, tailoring), and carpenters cluster on the forested slopes near their wood. Nothing places them; it's where their resources are.
-- **Split the chart open.** It starts with four bands: primary (farming, herding, forestry, mining), secondary (making things from raw materials), trading & carrying, and leisure. Click a band to split it, and click a part to group it again; hovering reads off the share in any year. At the top level the classic **structural transformation** shows up: primary work falls from 85% of hours in year 1 to 30% by year 100, and secondary work overtakes it around year 84.
-- **Compare wheat prices and populations on the Towns tab.** The valley town Rivermouth starts with the most people (about 470 of 1,500), and at year 100 wheat costs about 1.4 hours of work there against 1.7–1.8 in the hill towns: the price of carrying it uphill.
-- **Watch the hills go hungry, then recover.** Hill farmland is poor and the valley is crowded, so nearly half of people start out unable to meet their needs. Trade lets them sell wool, wood or furniture and buy wheat, and migration lets them leave:
+- **Split the chart open.** It starts with four bands: primary (farming, herding, forestry, mining), secondary (making things from raw materials), trading & carrying, and leisure. Click a band to split it, and click a part to group it again; hovering reads off the share in any year. At the top level the classic **structural transformation** shows up: primary work falls from 85% of hours in year 1 to 31% by year 100, and secondary work overtakes it around year 87.
+- **Compare wheat prices and populations on the Towns tab.** The valley town Rivermouth starts with the most people (about 470 of 1,500), and at year 100 wheat costs about 1.0 hour of work there against 1.35–1.4 in the hill towns: the price of carrying it uphill.
+- **Watch the hills go hungry, then invest their way out.** Hill farmland is poor and the valley is crowded, so nearly half of people start out unable to meet their needs. Because a hungry person values saved hours most, they put hours into a plough even while short of food. In year 2 more than a fifth of all hours go into making ploughs, and hunger is gone by about year 8, with or without trade:
 
-  | Needs unmet | Year 1 | Year 10 | Year 20 | Year 30 |
+  | Needs unmet | Year 1 | Year 5 | Year 10 | Year 20 |
   |---|---|---|---|---|
-  | Cheap trade (5%) | 47% | 16% | 0.5% | 0% |
+  | Cheap trade (5%) | 47% | 15% | 1% | 0% |
   | Default (30%) | 48% | 15% | 1% | 0% |
-  | No trade (300%) | 49% | 15% | 6% | 2% |
+  | No trade (300%) | 49% | 17% | 1% | 0% |
 - **Change the population.** Set `count` in `people.ron` (or run with `--people-count`) and press Reset. Bigger populations give each town a deeper market; try 500 against 3000 and compare unmatched trade.
 - **Change where people settle.** In `map.ron`, raise `settlement.strength` to crowd everyone into the valleys and empty the hills, or set it to 0 to spread people evenly.
-- **Watch the drift to the valley.** People move towards cheaper wheat. Rivermouth grows from about 500 to about 890 people by year 100 and 950 by year 200, while Ironhill shrinks from 300 to about 110. Moves are about 3% of people a year at first and fall below 0.5% as places even out. Migration clears hardship faster: at year 20, 1% can't meet their needs, against 9% with `chance: 0`. Farming, leisure and specialisation barely change.
+- **Watch the drift to the valley.** People move towards cheaper wheat. Rivermouth grows from about 500 to about 910 people by year 100, while Ironhill shrinks from 300 to about 110. Moves are about 3% of people a year at first and fall below 0.5% as places even out. Farming, leisure, specialisation and hunger barely change with `chance: 0`: people invest their way out of hardship rather than leaving it.
 - **Turn crowding down.** At `crowding: 0` (in Settings or `map.ron`) nothing holds people back and almost everyone ends up round Rivermouth. Raising it spreads them out a little.
 
 - **Raise the carrying cost.** Trade shrinks, prices drift further apart between towns, and the regions become more self-sufficient.

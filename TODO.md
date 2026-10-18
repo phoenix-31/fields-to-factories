@@ -48,7 +48,8 @@ Ore ranges smoothly from 0.1 to 1.6 over much of the map, so plenty of people ca
 Found in your 7,600-year no-technology run. Fixed with a sinking fund and choosing jobs with their tools (fixes 1 and 2), plus a rounding bug found on the way that left people stuck at 99.99% of a tool. See the CHANGELOG for the numbers.
 
 - [ ] **Credit** (saved for later): borrow for a tool and repay from the hours it saves.
-- [ ] **?** People with no spare hours still value a tool at nothing, because their last spare hour was worth nothing. With migration off, about a third of people stay unable to meet their needs for thousands of years. Is that the poverty trap we want, or should a person at the edge of hunger value saved hours *more*? Credit would also give them a way out.
+- [x] Hungry people value saved hours *more* (agreed), and can invest while short. Hunger now clears by year 8.
+- [ ] **?** Hunger has no lasting cost: someone can go very short for a year to buy a plough and be fine afterwards. Should going short have consequences (weaker work, illness, death and births) so investing while hungry is a real gamble?
 
 ## Quality of life
 
@@ -78,3 +79,4 @@ Found in your 7,600-year no-technology run. Fixed with a sinking fund and choosi
 - **2026-10-18:** sector hierarchy built and food renamed to wheat. Secondary work overtakes primary in year 84. New follow-ups noted under 1.
 - **2026-10-18:** lines moved to a separate people chart. Your long no-technology run exposed two flaws in how tools are replaced and taken up; written up under Model flaws, with three possible fixes to choose from.
 - **2026-10-18:** saving ahead and choosing jobs with their tools built. Iron ploughs now hold at about 70–87% instead of draining away. New open question on how the hungriest value tools.
+- **2026-10-18:** hungry people now value saved hours most and can invest while short. They invest their way out of hunger by year 8, so trade and migration no longer decide who escapes it. New open question on whether going short should cost anything.

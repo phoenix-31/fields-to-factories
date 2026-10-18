@@ -1,5 +1,17 @@
 # Changelog
 
+## The hungry invest
+
+### Changed
+- **Hungry people value saved hours most.** Before, someone who couldn't meet their needs valued a spare hour at nothing (they had none), so they never wanted a tool. Now their hour is worth at least what their first hour of rest would be, divided by the share of their needs they meet: the hungrier, the more an hour is worth.
+- **They can invest while short.** Someone who can't meet their needs even working all day puts a quarter-hour into a tool instead of food whenever the tool would save more hours over its life than it costs. Everyone else still meets their needs first.
+
+### Results
+- **Hunger clears by year 8 instead of year 20.** Needs unmet falls from 48% in year 1 to 15% by year 5 and 1% by year 10, against 28% and 14% before. In year 2, 22% of all hours go into making ploughs, an investment surge led by the poorest.
+- **Trade and migration no longer decide who escapes hunger.** With trade priced out (300%), or migration off, hunger clears just as fast. Before, a third of people stayed hungry for 1,000 years without migration and technology; now 1% do.
+- **More ploughs.** Iron-plough ownership is about 85–87% from year 20 on, against 65–76%.
+- The structural transformation is a little later: secondary work overtakes primary in year 87, against 84.
+
 ## Tools that last: saving ahead and choosing jobs with their tools
 
 ### Fixed
