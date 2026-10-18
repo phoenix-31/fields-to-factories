@@ -16,7 +16,7 @@ hours farming ≈ nourishment needed ÷ (food per hour × tool boost)
 
 The need doesn't grow, so every gain in farm productivity frees hours for everything else. Better ploughs raise the tool boost, but an iron plough sits at the end of a chain: wood → charcoal, plus ore → iron, then iron + wood → plough. Trade lets each person take part in that chain at whichever step suits their land, forest and ore, as long as the trip to market is worth it.
 
-![Main-work map at year 98: farming in the valley, textiles in the western hills, carpentry on the forested slopes](screenshot.png)
+![The window at year 103, hovering over a carpenter near Crossways](screenshot.png)
 
 ## Run
 
@@ -87,21 +87,20 @@ Edit any of them and press **Reset** in the app to reload all three without reco
 
 The loaders reject unknown goods, duplicate names, tools without a lifetime (or one under a year) or with a multiplier below 1, recipes that are inputs to themselves, wants no good provides, resources with no endowment, towns off the map, and terrain for resources no recipe uses.
 
-## The panel
+## The window
 
-- **Technology improves, at N×:** multiplies every recipe's `improves` rate. 0× freezes technology; 2× doubles every rate of progress.
-- **Trade cost:** time spent trading, as a share of the price. Drag it to 0% for free trade, or 200% to make trade pointless.
-- **Carrying cost:** hours to carry one unit of bulk one cell. Raise it and trade shrinks towards the towns.
-- **Map shows:** each person's day as a bar (the ground round it shows terrain: yellow-green valleys, dark green forest, grey hills), or each person's **main work** as a coloured square, which reads like a land-use map.
-- **Town table:** people, average wage, main work and food price for each town. Pick a town to show its prices in the production tree.
-- **Production tree:** raw materials on the left, what people consume on the right. Solid arrows are inputs, dashed arrows are tools, and each node shows its share of all waking hours and its price in the chosen town.
-- **Chart:** share of waking hours by sector, stacked to 100% with trading and leisure on top, plus a line per tool showing the share of people who own one, and a dashed line for specialisation.
-- **Production rates and tools** (collapsed): a slider for every recipe rate and tool multiplier.
+- **Top bar:** run or pause, step one year, simulation speed, reset (reloading the definition files), export CSV, and **How it works**, a short guide to the model.
+- **Map:** each square is one person. The key in its corner switches between **Each day** (a bar of their 16 waking hours, work at the bottom, leisure on top) and **Main work** (coloured by their biggest sector, like a land-use map), and opens a colour key. The ground shows terrain: yellow-green valleys, dark green forest, grey hills; diamonds are market towns. **Hover over anyone** to see their resources, town, job, wage, how they spent the day and which tools they own.
+- **Side panel tabs.** Hover over almost anything for an explanation.
+  - **Overview:** headline numbers (farming, leisure, needs unmet, specialisation, work sold, time trading and carrying), the "Where the day goes" chart, and "Why farming shrinks", the core equation with today's numbers.
+  - **Production:** the production tree with prices in a chosen town, and how many people own each tool.
+  - **Towns:** people, average wage, main work and food price for each town.
+  - **Settings:** technology speed, time at market, carrying cost, a slider for every recipe and tool, and the definition files with a reset button.
 
 ## Things to try
 
-- **Switch the map to "main work".** By year 100 the fertile valley round Rivermouth farms, the sheep hills round Westmoor have become a textile district (wool, cloth, tailoring), and carpenters cluster on the forested slopes near their wood. Nothing places them; it's where their resources are.
-- **Compare food prices in the town table.** At year 100 food costs about 1.3 hours of work in valley Rivermouth and about 1.9 in the hill towns: the price of carrying it uphill.
+- **Switch the map to "Main work".** By year 100 the fertile valley round Rivermouth farms, the sheep hills round Westmoor have become a textile district (wool, cloth, tailoring), and carpenters cluster on the forested slopes near their wood. Nothing places them; it's where their resources are.
+- **Compare food prices on the Towns tab.** At year 100 food costs about 1.3 hours of work in valley Rivermouth and about 1.9 in the hill towns: the price of carrying it uphill.
 - **Watch the hills go hungry, then recover.** Hill farmland is poor, so 42% of people start out unable to meet their needs. Trade lets them sell wool, wood or furniture and buy food:
 
   | Needs unmet | Year 10 | Year 20 | Year 30 |
@@ -128,7 +127,9 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
 | `src/map.rs` | Loads the map, generates terrain and finds each spot's nearest town |
 | `src/market.rs` | Each town's prices, merchants between towns, and each person's make-or-buy routes and job choice |
 | `src/sim.rs` | People as ECS components (`Home`, `Endowments`, `Needs`, `Tastes`, `Tools`, `Job`, `Trades`, …), and the `SimTick` schedule: advance technology → plan each day → replace tools → clear the market → record history |
-| `src/ui.rs` | The map (terrain, towns, and each person's day or main work), control panel, town table, production tree and stacked chart |
+| `src/ui/mod.rs` | The map: terrain, towns, and each person's day or main work |
+| `src/ui/panel.rs` | Top bar, tabbed side panel, map key, hover details and the How it works window |
+| `src/ui/charts.rs` | The production tree and the history chart |
 | `src/main.rs` | Windowed or headless entry point |
 
 See [CHANGELOG.md](CHANGELOG.md) for what each stage added.

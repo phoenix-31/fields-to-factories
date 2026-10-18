@@ -1,5 +1,20 @@
 # Changelog
 
+## UI clean-up
+
+### Changed
+- **The window is reorganised.** Run controls moved to a top bar. The single long side panel became four tabs: **Overview**, **Production**, **Towns** and **Settings**, each with a short description of what it shows.
+- **Overview** leads with headline numbers as cards, then the chart, with the core farming equation tucked into "Why farming shrinks".
+- **Settings** groups controls into Technology, Trade, Recipes (one collapsible section per good) and Definition files.
+- **Tooltips** on almost every number and control explain what it measures or does.
+- **The map key** moved onto the map: view switch, a collapsible colour key, and a hint.
+- `src/ui.rs` became the `src/ui/` module: `mod.rs` (map drawing), `panel.rs` (layout) and `charts.rs` (tree and chart).
+
+### Added
+- **Hover details:** point at any person to see their resources, town and distance, job and wage, how they spent the day, and which tools they own.
+- **How it works** window explaining the model in plain language.
+- **+1 year** button to step while paused.
+
 ## Stage 5: distance
 
 ### Added
