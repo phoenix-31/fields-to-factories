@@ -197,7 +197,7 @@ impl WorldMap {
                 let e = self.elevation[row * COLS + col];
                 out.push(match town {
                     Some(t) => (b'A' + t as u8) as char,
-                    None => [b'.', b'-', b'~', b'^'][((e * 4.0) as usize).min(3)] as char,
+                    None => b".-~^"[((e * 4.0) as usize).min(3)] as char,
                 });
                 out.push(' ');
             }
@@ -264,3 +264,7 @@ fn normalise(field: Vec<f32>) -> Vec<f32> {
     let span = (hi - lo).max(1e-6);
     field.into_iter().map(|v| (v - lo) / span).collect()
 }
+
+#[cfg(test)]
+#[path = "tests/map.rs"]
+mod tests;

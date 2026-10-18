@@ -310,3 +310,7 @@ fn build_sectors(defs: &[GoodDef]) -> Result<Vec<Sector>, String> {
     }
     Ok(sectors)
 }
+
+#[cfg(test)]
+#[path = "tests/goods.rs"]
+mod tests;

@@ -56,11 +56,7 @@ fn main() {
 }
 
 fn run_headless(sim: SimPlugin, years: u32) {
-    let mut app = App::new();
-    app.add_plugins((MinimalPlugins, sim));
-    app.finish();
-    app.cleanup();
-    app.update();
+    let mut app = sim::headless_app(sim);
     for _ in 0..years {
         app.world_mut().run_schedule(SimTick);
     }

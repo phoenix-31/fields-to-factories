@@ -338,3 +338,7 @@ pub fn autarky_prices(catalog: &Catalog, endowments: &[Vec<f32>]) -> Vec<f32> {
     }
     prices
 }
+
+#[cfg(test)]
+#[path = "tests/market.rs"]
+mod tests;

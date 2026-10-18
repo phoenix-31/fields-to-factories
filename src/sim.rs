@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 
+use bevy::ecs::query::QueryData;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
@@ -497,72 +498,57 @@ fn count_occupancy(mut occupancy: ResMut<Occupancy>, mut people: Query<(&Person,
     }
 }
 
-fn allocate_time(
-    catalog: Res<Catalog>,
-    markets: Res<Markets>,
-    population: Res<Population>,
-    mut people: Query<(
-        &Home,
-        (&Endowments, &Crowding),
-        &Needs,
-        &Tastes,
-        &mut Tools,
-        &mut Trades,
-        &mut Wage,
-        &mut Job,
-        &mut PersonRng,
-        &mut TimeUse,
-        &mut NeedsMet,
-        &mut HourValue,
-    )>,
-) {
-    people.par_iter_mut().for_each(
-        |(
-            home,
-            (endowments, crowding),
-            needs,
-            tastes,
-            mut tools,
-            mut trades,
-            mut wage,
-            mut job,
-            mut rng,
-            mut time,
-            mut needs_met,
-            mut hour_value,
-        )| {
-            let owned = tools.owned();
-            let review = (rng.0.next_f32() < JOB_REVIEW_CHANCE).then(|| rng.0.next_f32());
-            let access = markets.access(&catalog, home.town, home.distance);
-            let work_hours = time.hours.iter().sum::<f32>() + time.trading;
-            let routes =
-                plan_routes(&catalog, &access, &effective(&endowments.0, crowding.0), &owned, job.0, review, work_hours);
-            job.0 = routes.job;
-            let plan = plan_day(&Situation {
-                catalog: &catalog,
-                routes: &routes,
-                needs,
-                tastes,
-                tools: &tools,
-                owned: &owned,
-                last_year: &time,
-                work_hours,
-                hour_value: hour_value.0,
-                discount_rate: population.discount_rate,
-            });
-            for (good, def) in catalog.goods.iter().enumerate() {
-                if def.is_tool() {
-                    tools.progress[good] += plan.made[good];
-                }
+#[derive(QueryData)]
+#[query_data(mutable)]
+struct Planner {
+    home: &'static Home,
+    endowments: &'static Endowments,
+    crowding: &'static Crowding,
+    needs: &'static Needs,
+    tastes: &'static Tastes,
+    tools: &'static mut Tools,
+    trades: &'static mut Trades,
+    wage: &'static mut Wage,
+    job: &'static mut Job,
+    rng: &'static mut PersonRng,
+    time: &'static mut TimeUse,
+    needs_met: &'static mut NeedsMet,
+    hour_value: &'static mut HourValue,
+}
+
+fn allocate_time(catalog: Res<Catalog>, markets: Res<Markets>, population: Res<Population>, mut people: Query<Planner>) {
+    people.par_iter_mut().for_each(|mut p| {
+        let owned = p.tools.owned();
+        let review = (p.rng.0.next_f32() < JOB_REVIEW_CHANCE).then(|| p.rng.0.next_f32());
+        let access = markets.access(&catalog, p.home.town, p.home.distance);
+        let work_hours = p.time.hours.iter().sum::<f32>() + p.time.trading;
+        let endowments = effective(&p.endowments.0, p.crowding.0);
+        let routes = plan_routes(&catalog, &access, &endowments, &owned, p.job.0, review, work_hours);
+        p.job.0 = routes.job;
+        let plan = plan_day(&Situation {
+            catalog: &catalog,
+            routes: &routes,
+            needs: p.needs,
+            tastes: p.tastes,
+            tools: &p.tools,
+            owned: &owned,
+            last_year: &p.time,
+            work_hours,
+            hour_value: p.hour_value.0,
+            discount_rate: population.discount_rate,
+        });
+        for (good, def) in catalog.goods.iter().enumerate() {
+            if def.is_tool() {
+                p.tools.progress[good] += plan.made[good];
             }
-            trades.bought = plan.bought;
-            trades.sold = plan.sold;
-            wage.0 = routes.wage;
-            *time = plan.time;
-            needs_met.0 = plan.needs_met;
-            hour_value.0 = plan.hour_value;
-        },
-    );
+        }
+        p.trades.bought = plan.bought;
+        p.trades.sold = plan.sold;
+        p.wage.0 = routes.wage;
+        *p.time = plan.time;
+        p.needs_met.0 = plan.needs_met;
+        p.hour_value.0 = plan.hour_value;
+    });
 }
 
 fn replace_tools(catalog: Res<Catalog>, mut people: Query<(&mut Tools, &mut PersonRng)>) {
@@ -723,6 +709,15 @@ fn record_history(
     });
 }
 
+pub fn headless_app(sim: SimPlugin) -> App {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, sim));
+    app.finish();
+    app.cleanup();
+    app.update();
+    app
+}
+
 pub fn reset(world: &mut World) {
     let (goods_path, people_path, map_path) = {
         let defs = world.resource::<Definitions>();
@@ -823,3 +818,7 @@ pub fn write_csv(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/sim.rs"]
+mod tests;

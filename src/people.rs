@@ -165,3 +165,7 @@ impl Population {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "tests/people.rs"]
+mod tests;

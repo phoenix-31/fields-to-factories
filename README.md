@@ -29,6 +29,8 @@ cargo run --release -- --trade-cost 3 --headless 300  # start with a different t
 cargo run --release -- --people-count 3000            # override the number of people
 ```
 
+Run the tests with `cargo test --release` (using the release profile reuses the already-compiled Bevy).
+
 The first build compiles Bevy and takes several minutes. On Linux you also need the usual Bevy system packages (`libudev-dev`, `libwayland-dev`, `libxkbcommon-dev`). See Bevy's [Linux dependencies](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md).
 
 ## How people decide
@@ -145,6 +147,7 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
 | `src/ui/panel.rs` | Top bar, tabbed side panel, map key, hover details and the How it works window |
 | `src/ui/charts.rs` | The production tree, and the history chart with its expandable sector bands |
 | `src/main.rs` | Windowed or headless entry point |
+| `src/tests/` | Tests for each module, from loader errors to whole headless runs; `cargo test --release` runs them in about a second |
 
 See [CHANGELOG.md](CHANGELOG.md) for what each stage added.
 

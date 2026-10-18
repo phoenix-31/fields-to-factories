@@ -111,14 +111,12 @@ pub(super) fn layout(
         && map_rect.contains(pointer)
         && !key.contains(pointer)
         && !(view.state.help && ctx.is_pointer_over_egui())
+        && let Ok(world) = camera.0.viewport_to_world_2d(camera.1, Vec2::new(pointer.x, pointer.y))
+        && let Some(at) = hover_details(&ctx, pointer, world, &model, &people)
+        && let Ok(mark) = camera.0.world_to_viewport(camera.1, at.extend(0.0))
     {
-        if let Ok(world) = camera.0.viewport_to_world_2d(camera.1, Vec2::new(pointer.x, pointer.y))
-            && let Some(at) = hover_details(&ctx, pointer, world, &model, &people)
-            && let Ok(mark) = camera.0.world_to_viewport(camera.1, at.extend(0.0))
-        {
-            ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, "hovered".into()))
-                .circle_stroke(egui::pos2(mark.x, mark.y), 9.0, egui::Stroke::new(2.0, egui::Color32::WHITE));
-        }
+        ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, "hovered".into()))
+            .circle_stroke(egui::pos2(mark.x, mark.y), 9.0, egui::Stroke::new(2.0, egui::Color32::WHITE));
     }
     Ok(())
 }

@@ -1,5 +1,19 @@
 # Changelog
 
+## Tests
+
+### Added
+- **34 tests** in `src/tests/`, one file per module, run with `cargo test --release` in about a second:
+  - **Loaders:** the default files load, and each kind of bad definition is rejected with the right message.
+  - **Goods:** build order, the sector tree, group colours, and how tools combine.
+  - **Map:** neighbourhoods, crowding past capacity, nearest towns, settling on the map.
+  - **Markets:** prices respond to excess demand, merchants ship only when the gap pays for the trip, make-or-buy shares, job choice, and route planning.
+  - **Whole runs:** every waking hour is accounted for, runs are repeatable, prices stay positive, no one moves when migration is off, hunger falls as ploughs spread, and tool savings never exceed one tool.
+
+### Changed
+- `sim::headless_app` builds the headless app for both `--headless` and the tests.
+- The planner's long query became a named `Planner` query, and the three old clippy warnings are fixed. Output is unchanged, byte for byte.
+
 ## No more steady technological progress
 
 ### Removed

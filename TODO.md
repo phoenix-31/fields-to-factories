@@ -41,6 +41,21 @@ Ore ranges smoothly from 0.1 to 1.6 over much of the map, so plenty of people ca
 - Endowments are currently required to be above zero; deposits need near-zero to be allowed.
 - **?** Should deposits deplete, so mines run out and mining towns boom and bust?
 
+## Refactors to do before things get more complicated
+
+Each is tied to the feature that will need it. The tests guard behaviour while these are done.
+
+- [ ] **Split `sim.rs`** (840 lines). It holds the components, spawning, the yearly plan, tools, migration, history and the CSV. Split it into `sim/` modules. *Before births and deaths*, which add a person lifecycle.
+- [ ] **One place to make a person.** Spawning builds about 15 components inline. Births will need the same, so make one constructor. Per-person random seeds come from the spawn order; births need a seed source that keeps runs repeatable (the tests check this).
+- [ ] **Typed per-good vectors.** Hours, purchases, sales, prices, tool progress and coverage are all plain `Vec<f32>` indexed by good, with length checks scattered through the UI. Multiple recipes will add a second index (per recipe) beside the per-good one, which is easy to mix up. Use typed indices or a `PerGood<T>` wrapper. *Before multiple recipes.*
+- [ ] **One recipe per good is baked in:** `Good.recipe`, `direct_rate(good)`, hours tracked by good, and each good is its own sector leaf. Separate "what is made" from "how". *This is most of the work of multiple recipes.*
+- [ ] **Break up `plan_routes`** (126 lines). It runs a fixed four-pass loop that works out make-or-buy shares, the wage and the job choice together, then builds the flows. Split it into costs given a wage, job choice, and flows, so each can be tested alone.
+- [ ] **Name the time units.** One "day" stands for every day of a year, so an iron plough "costs 22 hours" of a 16-hour day. It's consistent but confusing; make the units explicit.
+- [ ] **Move tuning constants into the data files.** Price speed, job and buy spreads, route passes, job review chance, the paid-for threshold and the starting hour value are scattered constants in `market.rs` and `sim.rs`.
+- [ ] **Towns are fixed indices everywhere:** `Home.town`, `Markets.towns`, per-town CSV columns, the Towns tab and the merchants' loop. Markets that come and go need stable ids and a CSV that can grow. *Before emergent markets* (see below).
+- [ ] **Split `ui/panel.rs`** (680 lines) into one file per tab.
+- [ ] **Performance.** About 40 ms a year for 1,500 people. Each person plans routes every year, and again for every place they consider moving to. Profile before the population can grow through births.
+
 ## Model flaws found
 
 ### Ploughs slowly disappear: fixed
@@ -60,10 +75,22 @@ Found in your 7,600-year no-technology run. Fixed with a sinking fund and choosi
 - [ ] Compare runs: keep the last run's lines faintly on the chart after a Reset.
 - [ ] Map pan and zoom.
 - [ ] Mark the settings that only apply after a Reset.
-- [ ] Tests: there are none. Start with the loaders and a short headless run, before the big refactors.
-- [ ] Fix the three existing clippy warnings.
+- [x] Tests: 34 to start with (`cargo test --release`). Add tests alongside each new feature.
+- [x] Fix the three existing clippy warnings.
 - [ ] Faster headless runs (about 40 ms a year with 1,500 people).
 - [x] Needs-unmet, tool and specialisation lines moved off the hours chart onto their own chart.
+
+## Markets that emerge instead of fixed towns
+
+The four towns are placed by hand in `map.ron`, and people's settlement is pulled towards them. So the most important geography is assumed, not grown. Options:
+
+1. **Emergent market towns.** Markets are founded where many people live far from any market and trade would pay; they grow with trade and close when too few use them. People trade at the nearest open market. This is close to central place theory (Christaller, Lösch): market towns spaced by how far people will walk.
+2. **No towns at all.** Every map cell has its own prices, and carriers move goods between neighbouring cells when the price gap pays. Towns appear only as places where trade happens to concentrate. Most elegant, but the biggest change and the slowest to run.
+3. **Keep fixed towns** until births, deaths and discoveries are in.
+
+Things any option needs: stable market ids, a CSV and Towns tab that cope with markets appearing and closing, settlement that doesn't assume towns, and a rule for which market a person uses (nearest open one, or the best net of carrying).
+
+- [ ] **?** Which option, and when?
 
 ## Ideas, not yet planned
 
@@ -83,3 +110,4 @@ Found in your 7,600-year no-technology run. Fixed with a sinking fund and choosi
 - **2026-10-18:** saving ahead and choosing jobs with their tools built. Iron ploughs now hold at about 70–87% instead of draining away. New open question on how the hungriest value tools.
 - **2026-10-18:** hungry people now value saved hours most and can invest while short. They invest their way out of hunger by year 8, so trade and migration no longer decide who escapes it. New open question on whether going short should cost anything.
 - **2026-10-18:** steady technological progress removed; the economy now settles by year 50. Found that iron-plough ownership tracks who grows their own wheat; noted ploughing-as-a-service and births and deaths under ideas.
+- **2026-10-18:** 34 tests added and the old lint warnings fixed. Refactors flagged, each tied to the feature that needs it. Emergent markets written up with three options.
