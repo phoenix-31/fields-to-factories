@@ -1,10 +1,13 @@
 //! The production tree diagram and the history chart.
 
 use bevy_egui::egui;
-use egui_plot::{FilledArea, Line, Plot, PlotPoints};
+use egui_plot::{FilledArea, HoverPosition, Line, Plot, PlotPoints};
 
-use super::{HUNGRY_COLOR, LEISURE_COLOR, SPECIALISATION_COLOR, TRADING_COLOR, color32, lighten, swatch};
-use crate::goods::{Catalog, GoodId};
+use super::{
+    Expanded, HUNGRY_COLOR, LEISURE_COLOR, SPECIALISATION_COLOR, TRADING_COLOR, color32, lighten, sector_swatch, swatch,
+    visible_sectors,
+};
+use crate::goods::{Catalog, GoodId, SectorId};
 use crate::sim::History;
 
 fn columns(catalog: &Catalog) -> Vec<usize> {
@@ -127,18 +130,28 @@ pub(super) fn production_tree(ui: &mut egui::Ui, catalog: &Catalog, prices: &[f3
     }
 }
 
-pub(super) fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History) {
+struct Band {
+    sector: Option<SectorId>,
+    name: String,
+    color: [u8; 3],
+    lower: Vec<f64>,
+    upper: Vec<f64>,
+}
+
+pub(super) fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &History, expanded: &mut Expanded) {
     let samples = &history.0;
     let xs: Vec<f64> = samples.iter().map(|s| s.year as f64).collect();
     let mut lower = vec![0.0; samples.len()];
     let mut bands = Vec::new();
-    for (id, good) in catalog.goods.iter().enumerate() {
+    for sector in visible_sectors(catalog, expanded) {
+        let goods = &catalog.sectors[sector].goods;
         let upper: Vec<f64> = samples
             .iter()
             .zip(&lower)
-            .map(|(s, l)| l + s.shares.get(id).copied().unwrap_or(0.0) as f64 * 100.0)
+            .map(|(s, l)| l + goods.iter().map(|&g| s.shares.get(g).copied().unwrap_or(0.0) as f64).sum::<f64>() * 100.0)
             .collect();
-        bands.push((good.sector.clone(), good.color, lower, upper.clone()));
+        let def = &catalog.sectors[sector];
+        bands.push(Band { sector: Some(sector), name: def.name.clone(), color: def.color, lower, upper: upper.clone() });
         lower = upper;
     }
     let trading: Vec<f64> = samples
@@ -146,8 +159,18 @@ pub(super) fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &Hist
         .zip(&lower)
         .map(|(s, l)| l + s.trading_share as f64 * 100.0)
         .collect();
-    bands.push(("trading".into(), TRADING_COLOR, lower, trading.clone()));
-    bands.push(("leisure".into(), LEISURE_COLOR, trading, vec![100.0; samples.len()]));
+    bands.push(Band { sector: None, name: "trading & carrying".into(), color: TRADING_COLOR, lower, upper: trading.clone() });
+    bands.push(Band {
+        sector: None,
+        name: "leisure".into(),
+        color: LEISURE_COLOR,
+        lower: trading,
+        upper: vec![100.0; samples.len()],
+    });
+    let band_at = |x: f64, y: f64| {
+        let i = xs.iter().position(|&year| year >= x.round()).unwrap_or(xs.len().saturating_sub(1));
+        bands.iter().find(|b| b.lower.get(i).is_some_and(|&l| l <= y) && b.upper.get(i).is_some_and(|&u| y < u)).map(|b| (b, i))
+    };
 
     let hungry: PlotPoints = samples
         .iter()
@@ -170,8 +193,12 @@ pub(super) fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &Hist
             (format!("% with a {}", g.name), lighten(g.color), points)
         })
         .collect();
+    let lines: Vec<String> = ["needs unmet (% of people)".to_string(), "specialisation (%)".to_string()]
+        .into_iter()
+        .chain(coverage.iter().map(|c| c.0.clone()))
+        .collect();
 
-    Plot::new("time_use")
+    let plot = Plot::new("time_use")
         .height(260.0)
         .include_y(0.0)
         .include_y(100.0)
@@ -179,6 +206,7 @@ pub(super) fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &Hist
         .allow_drag(false)
         .allow_zoom(false)
         .allow_scroll(false)
+        .allow_double_click_reset(false)
         .x_axis_label("year")
         .x_grid_spacer(egui_plot::uniform_grid_spacer(|input| {
             let span = input.bounds.1 - input.bounds.0;
@@ -186,29 +214,79 @@ pub(super) fn stacked_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &Hist
             [step / 5.0, step, step * 5.0]
         }))
         .y_axis_label("% of waking hours")
-        .show(ui, |plot| {
-            for (name, color, lower, upper) in &bands {
-                plot.add(FilledArea::new(name.clone(), &xs, lower, upper).fill_color(color32(*color)));
+        .label_formatter(|hover| {
+            let (name, position) = match hover {
+                HoverPosition::NearDataPoint { plot_name, position, .. } => (Some(*plot_name), *position),
+                HoverPosition::Elsewhere { position } => (None, *position),
+            };
+            if let Some(name) = name.filter(|n| lines.iter().any(|l| l == n)) {
+                return Some(format!("{name}\n{:.0}% in year {:.0}", position.y, position.x));
             }
-            plot.line(Line::new("needs unmet (% of people)", hungry).color(color32(HUNGRY_COLOR)).width(2.0));
+            let (band, i) = band_at(position.x, position.y)?;
+            let hint = match band.sector.map(|s| &catalog.sectors[s]) {
+                Some(s) if !s.children.is_empty() => "\nclick to split it up",
+                Some(s) if s.parent.is_some() => "\nclick to group it again",
+                _ => "",
+            };
+            Some(format!("{}\n{:.1}% of hours in year {:.0}{hint}", band.name, band.upper[i] - band.lower[i], xs[i]))
+        })
+        .show(ui, |plot| {
+            for band in &bands {
+                plot.add(FilledArea::new(band.name.clone(), &xs, &band.lower, &band.upper).fill_color(color32(band.color)));
+            }
+            plot.line(Line::new(lines[0].clone(), hungry).color(color32(HUNGRY_COLOR)).width(2.0));
             for (name, color, points) in coverage {
                 plot.line(Line::new(name, points).color(color32(color)).width(2.0));
             }
             plot.line(
-                Line::new("specialisation (%)", specialisation)
+                Line::new(lines[1].clone(), specialisation)
                     .color(color32(SPECIALISATION_COLOR))
                     .style(egui_plot::LineStyle::dashed_loose())
                     .width(2.0),
             );
         });
+    if plot.response.clicked()
+        && let Some(pointer) = plot.response.interact_pointer_pos()
+    {
+        let at = plot.transform.value_from_position(pointer);
+        let target = band_at(at.x, at.y).and_then(|(b, _)| b.sector).and_then(|s| {
+            let def = &catalog.sectors[s];
+            if def.children.is_empty() { def.parent } else { Some(s) }
+        });
+        if let Some(sector) = target {
+            expanded.toggle(sector);
+        }
+    }
 
     ui.horizontal_wrapped(|ui| {
-        for good in &catalog.goods {
-            swatch(ui, good.color, &good.sector);
-        }
-        swatch(ui, TRADING_COLOR, "trading");
+        sector_legend(ui, catalog, expanded);
+        swatch(ui, TRADING_COLOR, "trading & carrying");
         swatch(ui, LEISURE_COLOR, "leisure");
         swatch(ui, HUNGRY_COLOR, "needs unmet");
         swatch(ui, SPECIALISATION_COLOR, "specialisation (dashed)");
     });
+}
+
+pub(super) fn sector_legend(ui: &mut egui::Ui, catalog: &Catalog, expanded: &mut Expanded) {
+    fn entry(ui: &mut egui::Ui, catalog: &Catalog, expanded: &Expanded, sector: SectorId, clicked: &mut Option<SectorId>) {
+        let def = &catalog.sectors[sector];
+        let open = expanded.0.contains(&sector);
+        let state = (!def.children.is_empty()).then_some(open);
+        let response = sector_swatch(ui, def.color, &def.name, state);
+        if state.is_some() && response.on_hover_text(if open { "Click to group these again" } else { "Click to split this up" }).clicked() {
+            *clicked = Some(sector);
+        }
+        if state == Some(true) {
+            for &child in &def.children {
+                entry(ui, catalog, expanded, child, clicked);
+            }
+        }
+    }
+    let mut clicked = None;
+    for root in (0..catalog.sectors.len()).filter(|&s| catalog.sectors[s].parent.is_none()) {
+        entry(ui, catalog, expanded, root, &mut clicked);
+    }
+    if let Some(sector) = clicked {
+        expanded.toggle(sector);
+    }
 }

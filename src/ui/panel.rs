@@ -8,9 +8,9 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContext, EguiContexts, egui};
 
-use super::charts::{production_tree, stacked_chart};
+use super::charts::{production_tree, sector_legend, stacked_chart};
 use super::{
-    CELL, GAP, HUNGRY_COLOR, LEISURE_COLOR, MapView, PANEL_WIDTH, ShownTown, SimSpeed, TRADING_COLOR, color32,
+    CELL, Expanded, GAP, HUNGRY_COLOR, LEISURE_COLOR, MapView, PANEL_WIDTH, ShownTown, SimSpeed, TRADING_COLOR, color32,
     lighten, swatch,
 };
 use crate::goods::{Catalog, GoodId};
@@ -51,6 +51,7 @@ pub(super) struct View<'w> {
     speed: ResMut<'w, SimSpeed>,
     shown: ResMut<'w, ShownTown>,
     map_view: ResMut<'w, MapView>,
+    expanded: ResMut<'w, Expanded>,
     state: ResMut<'w, PanelState>,
 }
 
@@ -103,7 +104,7 @@ pub(super) fn layout(
         ..default()
     });
 
-    let key = map_key(&ctx, map_rect, &model.catalog, &mut view.map_view);
+    let key = map_key(&ctx, map_rect, &model.catalog, &mut view.map_view, &mut view.expanded);
     if view.state.help {
         how_it_works(&ctx, &mut view.state.help);
     }
@@ -190,7 +191,7 @@ fn side_panel(ui: &mut egui::Ui, commands: &mut Commands, model: &mut Model, vie
         ui.colored_label(color32(HUNGRY_COLOR), format!("Reset kept the old definitions: {error}"));
     }
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match view.state.tab {
-        Tab::Overview => overview(ui, model, people),
+        Tab::Overview => overview(ui, model, people, &mut view.expanded),
         Tab::Production => production(ui, model, view),
         Tab::Towns => towns(ui, model, view, people),
         Tab::Settings => settings(ui, commands, model),
@@ -215,7 +216,7 @@ fn stat(ui: &mut egui::Ui, value: String, label: &str, tip: &str) {
         .on_hover_text(tip);
 }
 
-fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>) {
+fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>, expanded: &mut Expanded) {
     note(
         ui,
         &format!(
@@ -230,11 +231,18 @@ fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>) {
         note(ui, "Press Run to start.");
         return;
     };
-    let food = model.catalog.goods.iter().position(|g| g.name == "food");
+    let staples = staples(model);
     let pct = |v: f32| format!("{:.0}%", v * 100.0);
     egui::Grid::new("stats").num_columns(2).spacing([8.0, 8.0]).show(ui, |ui| {
-        if let Some(food) = food {
-            stat(ui, pct(last.shares[food]), "of the day spent farming", "Share of everyone's waking hours spent growing food, including food grown to sell.");
+        if !staples.is_empty() {
+            let share: f32 = staples.iter().map(|&g| last.shares[g]).sum();
+            let sectors: Vec<&str> = staples.iter().map(|&g| model.catalog.goods[g].sector.as_str()).collect();
+            stat(
+                ui,
+                pct(share),
+                &format!("of the day spent {}", sectors.join(" and ")),
+                "Share of everyone's waking hours spent making the goods that meet the first need, including what's made to sell.",
+            );
         }
         stat(ui, pct(last.leisure_share), "of the day is leisure", "Share of everyone's waking hours not spent working, trading or carrying.");
         ui.end_row();
@@ -258,11 +266,22 @@ fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>) {
 
     ui.add_space(10.0);
     ui.heading("Where the day goes");
-    note(ui, "Everyone's waking hours, stacked to 100%. Lines show the share of people owning each tool, needs going unmet, and specialisation.");
-    stacked_chart(ui, &model.catalog, &model.history);
+    note(
+        ui,
+        "Everyone's waking hours, stacked to 100%. Click a band to split it into its parts, and a part to \
+         group it again. Lines show tool ownership, needs unmet and specialisation.",
+    );
+    stacked_chart(ui, &model.catalog, &model.history, expanded);
 
     ui.add_space(6.0);
     egui::CollapsingHeader::new("Why farming shrinks").show(ui, |ui| farming_equation(ui, model, people));
+}
+
+fn staples(model: &Model) -> Vec<GoodId> {
+    let catalog = &model.catalog;
+    model.population.needs.first().map_or(Vec::new(), |&(c, _)| {
+        (0..catalog.len()).filter(|&g| catalog.provided(g, c) > 0.0).collect()
+    })
 }
 
 fn farming_equation(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>) {
@@ -352,14 +371,17 @@ fn towns(ui: &mut egui::Ui, model: &Model, view: &mut View, people: &Query<Perso
     );
     ui.add_space(6.0);
     let catalog = &model.catalog;
-    let food = (0..catalog.len()).find(|&g| catalog.goods[g].name == "food");
+    let food = staples(model).first().copied();
     egui::Grid::new("towns").striped(true).spacing([12.0, 4.0]).show(ui, |ui| {
         ui.label(egui::RichText::new("Town").strong());
         ui.label(egui::RichText::new("People").strong()).on_hover_text("People whose nearest town this is.");
         ui.label(egui::RichText::new("Wage").strong()).on_hover_text("Average wage of people here who sell at market.");
         ui.label(egui::RichText::new("Main work").strong()).on_hover_text("The two sectors taking most working hours here.");
-        if food.is_some() {
-            ui.label(egui::RichText::new("Food").strong()).on_hover_text("Price of food here, in hours of average work.");
+        if let Some(food) = food {
+            let name = &catalog.goods[food].name;
+            let mut title = name.clone();
+            title[..1].make_ascii_uppercase();
+            ui.label(egui::RichText::new(title).strong()).on_hover_text(format!("Price of {name} here, in hours of average work."));
         }
         ui.end_row();
         for (t, town) in model.markets.towns.iter().enumerate() {
@@ -480,7 +502,13 @@ fn settings(ui: &mut egui::Ui, commands: &mut Commands, model: &mut Model) {
     }
 }
 
-fn map_key(ctx: &egui::Context, map_rect: egui::Rect, catalog: &Catalog, map_view: &mut MapView) -> egui::Rect {
+fn map_key(
+    ctx: &egui::Context,
+    map_rect: egui::Rect,
+    catalog: &Catalog,
+    map_view: &mut MapView,
+    expanded: &mut Expanded,
+) -> egui::Rect {
     egui::Area::new("map_key".into())
         .fixed_pos(map_rect.min + egui::vec2(12.0, 12.0))
         .order(egui::Order::Foreground)
@@ -496,16 +524,15 @@ fn map_key(ctx: &egui::Context, map_rect: egui::Rect, catalog: &Catalog, map_vie
                 });
                 egui::CollapsingHeader::new("Colour key").default_open(false).show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
-                        for good in &catalog.goods {
-                            swatch(ui, good.color, &good.sector);
-                        }
+                        sector_legend(ui, catalog, expanded);
                         if *map_view == MapView::Days {
                             swatch(ui, TRADING_COLOR, "trading & carrying");
                             swatch(ui, LEISURE_COLOR, "leisure");
                             swatch(ui, HUNGRY_COLOR, "needs unmet");
                         }
                     });
-                    note(ui, "Ground: yellow-green valleys, dark green forest, grey hills. ◆ market town.");
+                    note(ui, "Click a group with an arrow to split it up; the chart does the same.");
+                    note(ui, "Ground: yellow-green valleys, dark green forest, grey hills. White diamonds are market towns.");
                 });
                 note(ui, "Hover over a person for details.");
             });

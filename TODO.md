@@ -4,21 +4,15 @@ A working list, reviewed together. Items move from **Ideas** to **Next** once we
 
 ## Next: the big four
 
-Suggested order: 1 → 2 → 4 → 3. The hierarchy makes adding goods bearable. Multiple recipes are the slot that discoveries fill. Deposits give discoveries something to find.
+Suggested order: 1 → 2 → 4 → 3. 1 is done. The hierarchy makes adding goods bearable. Multiple recipes are the slot that discoveries fill. Deposits give discoveries something to find.
 
-### 1. Sector hierarchy
+### 1. Sector hierarchy: done
 
-The chart has 13 bands, and it gets worse with every good. Group sectors into a tree and show the top level by default.
+See the CHANGELOG. Follow-ups:
 
-- Each good (later, each recipe) names its place in the tree, e.g. `sector: ["primary", "agriculture"]`, and the good itself is the leaf.
-- A first tree:
-  - **Primary:** agriculture (food, wool), forestry (wood), mining (ore)
-  - **Secondary:** textiles (cloth, clothing), woodwork (furniture, wooden plough), metals (charcoal, iron, iron plough)
-  - **Tertiary:** trading & carrying (later merchants and other services)
-  - **Leisure**
-- Chart (agreed): one band per top-level group by default; clicking a band or its legend entry expands it into its children while the others stay collapsed. Colours: one hue per family, shades for the children.
-- The same grouping applies to the map's "Main work" view, the Towns tab, hover details and the CSV (shares at each level).
-- **?** Rename `food` to `wheat`, so the good is separate from the need (nourishment) and other foods (barley, meat, fish) can be added later?
+- [ ] Trading & carrying sits at the top level for now. Once there are real services (merchants, transport), make it part of **tertiary**.
+- [ ] The Towns tab and hover details still list leaf activities. Should they follow the chart's level too?
+- [ ] The first overview card's label wraps ("of the day spent wheat farming"); a shorter name or a wider card.
 
 ### 2. Multiple recipes per good
 
@@ -49,7 +43,8 @@ Ore ranges smoothly from 0.1 to 1.6 over much of the map, so plenty of people ca
 
 ## Quality of life
 
-- [ ] Chart: hover to read the values at a year; zoom to the last N years.
+- [x] Chart: hover to read the values at a year.
+- [ ] Chart: zoom to the last N years.
 - [ ] Keyboard shortcuts: space to pause, → to step a year, R to reset.
 - [ ] A seed setting and a "new seed" button. The random seed is fixed, so every run is identical.
 - [ ] Compare runs: keep the last run's lines faintly on the chart after a Reset.
@@ -68,4 +63,5 @@ Ore ranges smoothly from 0.1 to 1.6 over much of the map, so plenty of people ca
 ## Review log
 
 - **2026-10-18:** list started. Big four added from your notes; QoL seeded with things noticed while building.
-- **2026-10-18:** agreed click-to-expand for the chart, discoveries driven by learning by doing × spare time, a power law for every resource, and old constant improvement kept as an option. Still open: rename food to wheat, how experience counts, discoveries spreading between towns, and deposit depletion.
+- **2026-10-18:** agreed click-to-expand for the chart, discoveries driven by learning by doing × spare time, a power law for every resource, and old constant improvement kept as an option. Still open: how experience counts, discoveries spreading between towns, and deposit depletion.
+- **2026-10-18:** sector hierarchy built and food renamed to wheat. Secondary work overtakes primary in year 84. New follow-ups noted under 1.

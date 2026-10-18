@@ -2,7 +2,7 @@
 
 About 1,500 people (you choose how many) are scattered over a 25 × 20 map, settling more densely on good farmland and near towns. Each splits a 16-hour waking day across the goods in an economy, trading at the nearest market town, plus leisure. Three data files define the world:
 
-- [`goods.ron`](goods.ron) holds facts about goods: what each one **provides** (food provides nourishment, clothing provides warmth, furniture provides comfort), how it's made, how fast its recipe improves, and how bulky it is to carry. Raw wool, wood and ore feed chains up to clothing, furniture and ploughs.
+- [`goods.ron`](goods.ron) holds facts about goods: what each one **provides** (wheat provides nourishment, clothing provides warmth, furniture provides comfort), how it's made, how fast its recipe improves, and how bulky it is to carry. Raw wool, wood and ore feed chains up to clothing, furniture and ploughs.
 - [`people.ron`](people.ron) holds **who** lives here and what they **want**: how many people, their needs and tastes (drawn per person from ranges), and the range of quality for each resource.
 - [`map.ron`](map.ron) holds the **geography**: terrain that decides where land, pasture, forest and ore are good, where people first settle, how crowding thins out resources, the market towns, and the cost of carrying goods.
 
@@ -11,7 +11,7 @@ People work out for themselves what any good is worth to them, including tools, 
 Nothing is scripted. The shift out of farming comes from one relationship:
 
 ```
-hours farming ≈ nourishment needed ÷ (food per hour × tool boost)
+hours farming ≈ nourishment needed ÷ (wheat per hour × tool boost)
 ```
 
 The need doesn't grow, so every gain in farm productivity frees hours for everything else. Better ploughs raise the tool boost, but an iron plough sits at the end of a chain: wood → charcoal, plus ore → iron, then iron + wood → plough. Trade lets each person take part in that chain at whichever step suits their land, forest and ore, as long as the trip to market is worth it.
@@ -60,6 +60,8 @@ Edit any of them and press **Reset** in the app to reload all three without reco
 
 | Field | Meaning |
 |---|---|
+| `sector` | Where the work sits in the industry tree, broadest first, e.g. `["primary", "agriculture", "wheat farming"]`. The last name is the good's own activity. The chart, map and CSV group by it |
+| `color` | The activity's colour; a group's colour is the average of its goods |
 | `provides` | What one unit gives a person, e.g. `[("nourishment", 1.0)]`. Tools and inputs provide nothing |
 | `recipe.rate` | Units made per hour of work |
 | `recipe.uses` | A resource, e.g. `"ore"`, whose per-person quality scales the rate |
@@ -67,7 +69,7 @@ Edit any of them and press **Reset** in the app to reload all three without reco
 | `recipe.inputs` | Goods used up per unit, e.g. `[("iron", 2.0), ("wood", 2.0)]` |
 | `recipe.tools` | Tools that multiply this recipe's output; a person works with the best one they own |
 | `lifetime` | Makes the good a tool: the years it lasts before breaking, drawn from the range, e.g. `(15.0, 35.0)` |
-| `bulk` | How hard one unit is to carry, relative to food (default 1). Ore is 2, cloth 0.3 |
+| `bulk` | How hard one unit is to carry, relative to wheat (default 1). Ore is 2, cloth 0.3 |
 
 **`people.ron`**: values are fixed (`1.0`) or a range (`(0.8, 1.2)`) that each person draws from.
 
@@ -97,18 +99,19 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
 ## The window
 
 - **Top bar:** run or pause, step one year, simulation speed (5 years a second by default, up to 30), reset (reloading the definition files), export CSV, and **How it works**, a short guide to the model.
-- **Map:** each small mark is one person, placed where they live; several can share a cell. The key in its corner switches between **Each day** (a bar of their 16 waking hours, work at the bottom, leisure on top) and **Main work** (coloured by their biggest sector, like a land-use map), and opens a colour key. The ground shows terrain: yellow-green valleys, dark green forest, grey hills; diamonds are market towns. **Hover over anyone** to ring them and see their resources, town, job, wage, how they spent the day, which tools they own, how often they've moved, and how much crowding cuts their resources.
+- **Map:** each small mark is one person, placed where they live; several can share a cell. The key in its corner switches between **Each day** (a bar of their 16 waking hours, work at the bottom, leisure on top) and **Main work** (coloured by their biggest sector, like a land-use map), and opens a colour key. The marks use whatever sector level the chart shows. The ground shows terrain: yellow-green valleys, dark green forest, grey hills; diamonds are market towns. **Hover over anyone** to ring them and see their resources, town, job, wage, how they spent the day, which tools they own, how often they've moved, and how much crowding cuts their resources.
 - **Side panel tabs.** Hover over almost anything for an explanation.
-  - **Overview:** headline numbers (farming, leisure, needs unmet, specialisation, work sold, time trading and carrying, people who moved home this year), the "Where the day goes" chart, and "Why farming shrinks", the core equation with today's numbers.
+  - **Overview:** headline numbers (wheat farming, leisure, needs unmet, specialisation, work sold, time trading and carrying, people who moved home this year), the "Where the day goes" chart, and "Why farming shrinks", the core equation with today's numbers.
   - **Production:** the production tree with prices in a chosen town, and how many people own each tool.
-  - **Towns:** people, average wage, main work and food price for each town.
+  - **Towns:** people, average wage, main work and wheat price for each town.
   - **Settings:** technology speed, time at market, carrying cost, a slider for every recipe and tool, migration (how many look, how many places, the gain needed, crowding), and the definition files with a reset button.
 
 ## Things to try
 
 - **Switch the map to "Main work".** By year 100 the fertile valley round Rivermouth farms, the sheep hills round Westmoor have become a textile district (wool, cloth, tailoring), and carpenters cluster on the forested slopes near their wood. Nothing places them; it's where their resources are.
-- **Compare food prices and populations on the Towns tab.** The valley town Rivermouth starts with the most people (about 470 of 1,500), and at year 100 food costs about 1.4 hours of work there against 1.7–1.8 in the hill towns: the price of carrying it uphill.
-- **Watch the hills go hungry, then recover.** Hill farmland is poor and the valley is crowded, so nearly half of people start out unable to meet their needs. Trade lets them sell wool, wood or furniture and buy food, and migration lets them leave:
+- **Split the chart open.** It starts with four bands: primary (farming, herding, forestry, mining), secondary (making things from raw materials), trading & carrying, and leisure. Click a band to split it, and click a part to group it again; hovering reads off the share in any year. At the top level the classic **structural transformation** shows up: primary work falls from 85% of hours in year 1 to 30% by year 100, and secondary work overtakes it around year 84.
+- **Compare wheat prices and populations on the Towns tab.** The valley town Rivermouth starts with the most people (about 470 of 1,500), and at year 100 wheat costs about 1.4 hours of work there against 1.7–1.8 in the hill towns: the price of carrying it uphill.
+- **Watch the hills go hungry, then recover.** Hill farmland is poor and the valley is crowded, so nearly half of people start out unable to meet their needs. Trade lets them sell wool, wood or furniture and buy wheat, and migration lets them leave:
 
   | Needs unmet | Year 1 | Year 10 | Year 20 | Year 30 |
   |---|---|---|---|---|
@@ -117,14 +120,14 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
   | No trade (300%) | 49% | 15% | 6% | 2% |
 - **Change the population.** Set `count` in `people.ron` (or run with `--people-count`) and press Reset. Bigger populations give each town a deeper market; try 500 against 3000 and compare unmatched trade.
 - **Change where people settle.** In `map.ron`, raise `settlement.strength` to crowd everyone into the valleys and empty the hills, or set it to 0 to spread people evenly.
-- **Watch the drift to the valley.** People move towards cheaper food. Rivermouth grows from about 500 to about 890 people by year 100 and 950 by year 200, while Ironhill shrinks from 300 to about 110. Moves are about 3% of people a year at first and fall below 0.5% as places even out. Migration clears hardship faster: at year 20, 1% can't meet their needs, against 9% with `chance: 0`. Farming, leisure and specialisation barely change.
+- **Watch the drift to the valley.** People move towards cheaper wheat. Rivermouth grows from about 500 to about 890 people by year 100 and 950 by year 200, while Ironhill shrinks from 300 to about 110. Moves are about 3% of people a year at first and fall below 0.5% as places even out. Migration clears hardship faster: at year 20, 1% can't meet their needs, against 9% with `chance: 0`. Farming, leisure and specialisation barely change.
 - **Turn crowding down.** At `crowding: 0` (in Settings or `map.ron`) nothing holds people back and almost everyone ends up round Rivermouth. Raising it spreads them out a little.
 
 - **Raise the carrying cost.** Trade shrinks, prices drift further apart between towns, and the regions become more self-sufficient.
 - **Move or add a town in `map.ron`,** then press Reset. Put one deep in the western hills and see whether the textile district moves with it.
 - **Watch where freed time goes.** Farming shrinks, and so does weaving, which improves fastest (2% a year). Tailoring and carpentry improve slowly (0.5%), so they hold on to workers or grow. This is **Baumol's cost disease**: labour moves into the sectors whose productivity *doesn't* rise.
 - **Watch years 2–10.** Cheap wooden ploughs spread first, then iron ploughs take over as a mining, charcoal and smelting chain forms.
-- **Export CSV** writes `history.csv` with each good's rate and its price in every town, each sector's share of hours overall and in every town, trading time, specialisation, trade carried between towns, unmatched trade and tool ownership.
+- **Export CSV** writes `history.csv` with each good's rate and its price in every town, each sector's share of hours overall and in every town, each sector group's share (e.g. `primary/agriculture_share`), trading time, specialisation, trade carried between towns, unmatched trade and tool ownership.
 
 ## Layout
 
@@ -140,7 +143,7 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
 | `src/sim.rs` | People as ECS components (`Home`, `Endowments`, `Needs`, `Tastes`, `Tools`, `Job`, `Trades`, …), and the `SimTick` schedule: advance technology → plan each day → replace tools → clear the market → record history |
 | `src/ui/mod.rs` | The map: terrain, towns, and each person's day or main work |
 | `src/ui/panel.rs` | Top bar, tabbed side panel, map key, hover details and the How it works window |
-| `src/ui/charts.rs` | The production tree and the history chart |
+| `src/ui/charts.rs` | The production tree, and the history chart with its expandable sector bands |
 | `src/main.rs` | Windowed or headless entry point |
 
 See [CHANGELOG.md](CHANGELOG.md) for what each stage added.

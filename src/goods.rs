@@ -11,6 +11,7 @@ use crate::people::Spread;
 pub type GoodId = usize;
 pub type CharId = usize;
 pub type ResourceId = usize;
+pub type SectorId = usize;
 
 #[derive(Clone, Copy)]
 pub struct ToolUse {
@@ -44,9 +45,19 @@ impl Good {
     }
 }
 
+#[derive(Clone)]
+pub struct Sector {
+    pub name: String,
+    pub parent: Option<SectorId>,
+    pub children: Vec<SectorId>,
+    pub goods: Vec<GoodId>,
+    pub color: [u8; 3],
+}
+
 #[derive(Resource, Clone)]
 pub struct Catalog {
     pub goods: Vec<Good>,
+    pub sectors: Vec<Sector>,
     pub characteristics: Vec<String>,
     pub resources: Vec<String>,
     pub build_order: Vec<GoodId>,
@@ -55,7 +66,7 @@ pub struct Catalog {
 #[derive(Deserialize)]
 struct GoodDef {
     name: String,
-    sector: String,
+    sector: Vec<String>,
     color: [u8; 3],
     #[serde(default)]
     provides: Vec<(String, f32)>,
@@ -163,7 +174,7 @@ impl Catalog {
             });
             goods.push(Good {
                 name: def.name.clone(),
-                sector: def.sector.clone(),
+                sector: def.sector.last().cloned().unwrap_or_default(),
                 color: def.color,
                 provides,
                 recipe: Recipe {
@@ -182,7 +193,8 @@ impl Catalog {
             return Err(format!("\"{}\" needs a lifetime of at least 1 year", def.name));
         }
 
-        let mut catalog = Self { goods, characteristics, resources, build_order: Vec::new() };
+        let sectors = build_sectors(&defs)?;
+        let mut catalog = Self { goods, sectors, characteristics, resources, build_order: Vec::new() };
         for id in 0..catalog.len() {
             catalog.check_acyclic(id, &mut Vec::new())?;
         }
@@ -214,6 +226,14 @@ impl Catalog {
         }
         path.pop();
         Ok(())
+    }
+
+    pub fn sector_path(&self, sector: SectorId) -> String {
+        let s = &self.sectors[sector];
+        match s.parent {
+            Some(parent) => format!("{}/{}", self.sector_path(parent), s.name),
+            None => s.name.clone(),
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -258,4 +278,42 @@ impl Catalog {
         let endowment = recipe.uses.map_or(1.0, |r| endowments[r]);
         recipe.rate * endowment * self.tool_multiplier(good, stock)
     }
+}
+
+fn build_sectors(defs: &[GoodDef]) -> Result<Vec<Sector>, String> {
+    let mut sectors: Vec<Sector> = Vec::new();
+    for (good, def) in defs.iter().enumerate() {
+        if def.sector.is_empty() {
+            return Err(format!("\"{}\" needs a sector", def.name));
+        }
+        let mut parent = None;
+        for (depth, name) in def.sector.iter().enumerate() {
+            let leaf = depth + 1 == def.sector.len();
+            let id = match sectors.iter().position(|s| s.parent == parent && &s.name == name) {
+                Some(id) if leaf || sectors[id].children.is_empty() => {
+                    return Err(format!(
+                        "sector \"{}\" of \"{}\" is already used by another good",
+                        def.sector[..=depth].join(" / "),
+                        def.name
+                    ));
+                }
+                Some(id) => id,
+                None => {
+                    let id = sectors.len();
+                    sectors.push(Sector { name: name.clone(), parent, children: Vec::new(), goods: Vec::new(), color: [0; 3] });
+                    if let Some(p) = parent {
+                        sectors[p].children.push(id);
+                    }
+                    id
+                }
+            };
+            sectors[id].goods.push(good);
+            parent = Some(id);
+        }
+    }
+    for sector in &mut sectors {
+        let n = sector.goods.len() as u32;
+        sector.color = [0, 1, 2].map(|i| (sector.goods.iter().map(|&g| defs[g].color[i] as u32).sum::<u32>() / n) as u8);
+    }
+    Ok(sectors)
 }

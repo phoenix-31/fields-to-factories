@@ -1,5 +1,25 @@
 # Changelog
 
+## Sector hierarchy
+
+### Changed
+- **Sectors form a tree.** Each good's `sector` in `goods.ron` is now a path, broadest first: `["primary", "agriculture", "wheat farming"]`. The default tree has **primary** (agriculture, forestry, mining) and **secondary** (textiles, carpentry, metals, tools).
+- **The chart starts at the top level.** It shows primary, secondary, trading & carrying, and leisure. Clicking a band or its legend entry splits it into its parts; clicking a part groups it again. A group's colour is the average of its goods.
+- **The map follows the chart.** In both views, people's marks use the sector level the chart shows, and the map's colour key can split and group sectors too.
+- **Food is now wheat,** so the good is separate from the need it meets (nourishment), and other foods can be added later. CSV columns are renamed to match (`wheat_rate`, `wheat farming_share`, `<town>: wheat_price`).
+- The overview's first card and the Towns tab's price column follow the goods that meet the first need, instead of looking for a good called "food".
+
+### Added
+- **Hovering over the chart** shows the band's name and share of hours in that year, or a line's value.
+- **CSV:** a share column for each sector group, named by its path, e.g. `primary/agriculture_share`.
+- The loader rejects a sector path used both by a good and as a group, and a good without a sector.
+
+### Fixed
+- The map key's "◆ market town" showed a box instead of a diamond.
+
+### Results
+- **Structural transformation** is visible at the top level: primary work falls from 85% of hours in year 1 to 30% by year 100 and 20% by year 200, while secondary work rises from 7% to 32% and then 37%, overtaking primary in year 84.
+
 ## Migration
 
 ### Added

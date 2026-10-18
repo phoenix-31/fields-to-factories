@@ -765,6 +765,10 @@ pub fn write_csv(
     for g in &catalog.goods {
         header.push(format!("{}_share", g.sector));
     }
+    let groups: Vec<_> = (0..catalog.sectors.len()).filter(|&s| !catalog.sectors[s].children.is_empty()).collect();
+    for &group in &groups {
+        header.push(format!("{}_share", catalog.sector_path(group)));
+    }
     for town in towns {
         for g in &catalog.goods {
             header.push(format!("{town}: {}_share", g.sector));
@@ -787,6 +791,9 @@ pub fn write_csv(
         row.extend(s.rates.iter().map(|v| format!("{v:.4}")));
         row.extend(s.prices.iter().flatten().map(|v| format!("{v:.4}")));
         row.extend(s.shares.iter().map(|v| format!("{v:.4}")));
+        for &group in &groups {
+            row.push(format!("{:.4}", catalog.sectors[group].goods.iter().map(|&g| s.shares[g]).sum::<f32>()));
+        }
         row.extend(s.town_shares.iter().flatten().map(|v| format!("{v:.4}")));
         for v in [s.trading_share, s.leisure_share, s.hungry_share, s.specialisation, s.traded, s.carried, s.mismatch, s.moved] {
             row.push(format!("{v:.4}"));

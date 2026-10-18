@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::BlendState;
 use bevy_egui::{EguiGlobalSettings, EguiPrimaryContextPass, PrimaryEguiContext, egui};
 
-use crate::goods::{Catalog, GoodId};
+use crate::goods::{Catalog, SectorId};
 use crate::map::WorldMap;
 use crate::people::Population;
 use crate::sim::*;
@@ -37,6 +37,38 @@ enum MapView {
 #[derive(Component)]
 struct MapFeature;
 
+#[derive(Resource, Default)]
+struct Expanded(Vec<SectorId>);
+
+impl Expanded {
+    fn toggle(&mut self, sector: SectorId) {
+        match self.0.iter().position(|&s| s == sector) {
+            Some(i) => {
+                self.0.remove(i);
+            }
+            None => self.0.push(sector),
+        }
+    }
+}
+
+fn visible_sectors(catalog: &Catalog, expanded: &Expanded) -> Vec<SectorId> {
+    fn walk(catalog: &Catalog, expanded: &Expanded, sector: SectorId, out: &mut Vec<SectorId>) {
+        let children = &catalog.sectors[sector].children;
+        if expanded.0.contains(&sector) && !children.is_empty() {
+            for &child in children {
+                walk(catalog, expanded, child, out);
+            }
+        } else {
+            out.push(sector);
+        }
+    }
+    let mut out = Vec::new();
+    for root in (0..catalog.sectors.len()).filter(|&s| catalog.sectors[s].parent.is_none()) {
+        walk(catalog, expanded, root, &mut out);
+    }
+    out
+}
+
 #[derive(Resource)]
 struct SimSpeed {
     years_per_second: f32,
@@ -52,6 +84,7 @@ impl Plugin for UiPlugin {
             .insert_resource(ClearColor(Color::srgb(0.08, 0.09, 0.11)))
             .init_resource::<ShownTown>()
             .init_resource::<MapView>()
+            .init_resource::<Expanded>()
             .init_resource::<panel::PanelState>()
             .add_systems(Startup, setup_cameras)
             .add_systems(Update, (drive_sim, rebuild_bars, move_marks, draw_days).chain())
@@ -80,7 +113,7 @@ fn setup_cameras(mut commands: Commands, mut egui_settings: ResMut<EguiGlobalSet
 
 #[derive(Component, Clone, Copy)]
 enum DaySegment {
-    Good(GoodId),
+    Slot(usize),
     Trading,
     Leisure,
 }
@@ -114,12 +147,14 @@ fn rebuild_bars(
     people: Query<(Entity, &Person)>,
     features: Query<Entity, With<MapFeature>>,
     mut shown: ResMut<ShownTown>,
+    mut expanded: ResMut<Expanded>,
     mut built: Local<Option<u32>>,
 ) {
     if *built == Some(definitions.version) {
         return;
     }
     *built = Some(definitions.version);
+    expanded.0.clear();
     shown.0 = shown.0.min(world_map.towns.len() - 1);
     for entity in &features {
         commands.entity(entity).despawn();
@@ -156,7 +191,7 @@ fn rebuild_bars(
             .insert((Transform::from_translation(pos.extend(person.y * 0.01)), Visibility::default()))
             .despawn_related::<Children>()
             .with_children(|bar| {
-                let segments = (0..catalog.len()).map(DaySegment::Good).chain([DaySegment::Trading, DaySegment::Leisure]);
+                let segments = (0..catalog.len()).map(DaySegment::Slot).chain([DaySegment::Trading, DaySegment::Leisure]);
                 for segment in segments {
                     bar.spawn((segment, Sprite::from_color(Color::NONE, Vec2::ZERO), Transform::default()));
                 }
@@ -199,35 +234,50 @@ fn draw_days(
     catalog: Res<Catalog>,
     population: Res<Population>,
     view: Res<MapView>,
+    expanded: Res<Expanded>,
     people: Query<(&TimeUse, &NeedsMet)>,
     mut segments: Query<(&DaySegment, &ChildOf, &mut Sprite, &mut Transform)>,
 ) {
+    let shown = visible_sectors(&catalog, &expanded);
+    let meets_need: Vec<bool> = shown
+        .iter()
+        .map(|&s| {
+            let goods = &catalog.sectors[s].goods;
+            goods.iter().any(|&g| population.needs.iter().any(|&(c, _)| catalog.provided(g, c) > 0.0))
+        })
+        .collect();
     for (segment, child_of, mut sprite, mut transform) in &mut segments {
         let Ok((time, needs_met)) = people.get(child_of.parent()) else {
             continue;
         };
+        if time.hours.len() != catalog.len() {
+            continue;
+        }
+        let hours_in = |slot: usize| catalog.sectors[shown[slot]].goods.iter().map(|&g| time.hours[g]).sum::<f32>();
         let worked: f32 = time.hours.iter().sum();
         if *view == MapView::MainWork {
-            let main = (0..time.hours.len()).max_by(|&a, &b| time.hours[a].total_cmp(&time.hours[b]));
-            let shown = matches!(*segment, DaySegment::Good(g) if Some(g) == main);
-            let color = main.map_or(LEISURE_COLOR, |g| catalog.goods[g].color);
-            let size = if shown { Vec2::splat(MARK_WIDTH + 2.0) } else { Vec2::ZERO };
-            sprite.custom_size = Some(size);
-            sprite.color = srgb(color);
+            let first = matches!(*segment, DaySegment::Slot(0));
+            if first {
+                let main = (0..shown.len()).max_by(|&a, &b| hours_in(a).total_cmp(&hours_in(b)));
+                sprite.color = srgb(main.map_or(LEISURE_COLOR, |m| catalog.sectors[shown[m]].color));
+            }
+            sprite.custom_size = Some(if first { Vec2::splat(MARK_WIDTH + 2.0) } else { Vec2::ZERO });
             transform.translation.y = 0.0;
             continue;
         }
         let (below, hours, color) = match *segment {
-            DaySegment::Good(good) if good < time.hours.len() => {
-                let meets_need = population.needs.iter().any(|&(c, _)| catalog.provided(good, c) > 0.0);
-                let color = if meets_need && needs_met.0 < 0.999 {
+            DaySegment::Slot(slot) if slot < shown.len() => {
+                let color = if meets_need[slot] && needs_met.0 < 0.999 {
                     HUNGRY_COLOR
                 } else {
-                    catalog.goods[good].color
+                    catalog.sectors[shown[slot]].color
                 };
-                (time.hours[..good].iter().sum::<f32>(), time.hours[good], color)
+                ((0..slot).map(hours_in).sum::<f32>(), hours_in(slot), color)
             }
-            DaySegment::Good(_) => continue,
+            DaySegment::Slot(_) => {
+                sprite.custom_size = Some(Vec2::ZERO);
+                continue;
+            }
             DaySegment::Trading => (worked, time.trading, TRADING_COLOR),
             DaySegment::Leisure => (worked + time.trading, time.leisure, LEISURE_COLOR),
         };
@@ -240,13 +290,36 @@ fn draw_days(
 }
 
 fn swatch(ui: &mut egui::Ui, rgb: [u8; 3], label: &str) {
+    sector_swatch(ui, rgb, label, None);
+}
+
+fn sector_swatch(ui: &mut egui::Ui, rgb: [u8; 3], label: &str, open: Option<bool>) -> egui::Response {
     let text_color = ui.visuals().text_color();
     let galley = ui.painter().layout_no_wrap(label.to_string(), egui::FontId::proportional(13.0), text_color);
-    let size = egui::vec2(16.0 + galley.size().x, galley.size().y.max(12.0));
-    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let arrow = if open.is_some() { 12.0 } else { 0.0 };
+    let size = egui::vec2(16.0 + galley.size().x + arrow, galley.size().y.max(12.0));
+    let sense = if open.is_some() { egui::Sense::click() } else { egui::Sense::hover() };
+    let (rect, response) = ui.allocate_exact_size(size, sense);
     let square = egui::Rect::from_min_size(rect.left_center() - egui::vec2(0.0, 6.0), egui::vec2(12.0, 12.0));
-    ui.painter().rect_filled(square, 2.0, color32(rgb));
+    if open == Some(true) {
+        ui.painter().rect_stroke(square.shrink(1.0), 2.0, egui::Stroke::new(1.5, color32(rgb)), egui::StrokeKind::Inside);
+    } else {
+        ui.painter().rect_filled(square, 2.0, color32(rgb));
+    }
+    let tip = rect.min + egui::vec2(16.0 + galley.size().x + 7.0, rect.height() / 2.0);
     ui.painter().galley(rect.min + egui::vec2(16.0, 0.0), galley, text_color);
+    if let Some(open) = open {
+        let points = if open {
+            vec![tip + egui::vec2(-4.0, -2.0), tip + egui::vec2(4.0, -2.0), tip + egui::vec2(0.0, 3.0)]
+        } else {
+            vec![tip + egui::vec2(-2.0, -4.0), tip + egui::vec2(3.0, 0.0), tip + egui::vec2(-2.0, 4.0)]
+        };
+        ui.painter().add(egui::Shape::convex_polygon(points, text_color, egui::Stroke::NONE));
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+    }
+    response
 }
 
 fn lighten(rgb: [u8; 3]) -> [u8; 3] {
