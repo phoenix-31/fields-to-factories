@@ -1,5 +1,17 @@
 # Changelog
 
+## No more steady technological progress
+
+### Removed
+- **Recipes no longer improve by a fixed share every year.** `improves` is gone from `goods.ron`, along with the Technology settings. Over long runs it compounded until rates hit their cap and the model blew up. Technology will come back as **discoveries** (see TODO.md).
+
+### Results
+- **The economy now settles.** Farming falls from 81% of the day to 43% by year 20 as ploughs spread and people specialise, then holds at about 38% for 1,000 years. Leisure settles at 22%, carpentry at 16%, and iron-plough ownership creeps up from 84% to 89%.
+- **Secondary work never overtakes primary.** Primary work settles at 47% of hours and secondary at 26%; the structural transformation needs ongoing productivity growth.
+- **Hunger clears more slowly** (6% at year 10, 1% at year 20, against 1% and 0%), since farming no longer gets easier each year.
+- **Wheat stays dear:** about 4.6 hours of work in Rivermouth at year 100, against 1.0 with technology.
+- **Iron ploughs and farming:** almost exactly everyone who grows wheat owns an iron plough. At year 1,000, 1,332 of the 1,333 people farming 2 hours a day or more own one, and none of the 166 who buy all their wheat do. Only 582 of them farm for a living; the other 750 or so grow their own food (about 6.4 hours a day) alongside another job.
+
 ## The hungry invest
 
 ### Changed

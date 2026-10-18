@@ -23,7 +23,6 @@ pub struct ToolUse {
 pub struct Recipe {
     pub rate: f32,
     pub uses: Option<ResourceId>,
-    pub improves: f32,
     pub inputs: Vec<(GoodId, f32)>,
     pub tools: Vec<ToolUse>,
 }
@@ -87,8 +86,6 @@ struct RecipeDef {
     #[serde(default)]
     uses: Option<String>,
     #[serde(default)]
-    improves: f32,
-    #[serde(default)]
     inputs: Vec<(String, f32)>,
     #[serde(default)]
     tools: Vec<ToolDef>,
@@ -130,9 +127,6 @@ impl Catalog {
             }
             if def.bulk < 0.0 {
                 return Err(format!("\"{}\" can't have negative bulk", def.name));
-            }
-            if def.recipe.improves < 0.0 {
-                return Err(format!("\"{}\" can't improve by a negative amount", def.name));
             }
             let provides = def
                 .provides
@@ -180,7 +174,6 @@ impl Catalog {
                 recipe: Recipe {
                     rate: def.recipe.rate,
                     uses,
-                    improves: def.recipe.improves,
                     inputs,
                     tools,
                 },

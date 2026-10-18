@@ -24,9 +24,9 @@ Today each good has exactly one way to make it.
 
 ### 3. Technology as discovery
 
-At the moment every recipe improves by a fixed percentage every year, so every run is the same smooth glide. Real history is lumpy: new crops, coal, the blast furnace. Discoveries create winners and losers, and change where it pays to live, which migration then acts on.
+Steady yearly improvement has been **removed** (your call: it blew up long runs). Without it the economy settles by year 50 and stays put, so discoveries are now the only source of progress. Real history is lumpy: new crops, coal, the blast furnace. Discoveries create winners and losers, and change where it pays to live, which migration then acts on.
 
-- **Discoveries** unlock a new resource, recipe or good. The old constant improvement becomes **optional** (agreed): off by default, with a setting to turn it back on for comparison.
+- **Discoveries** unlock a new resource, recipe or good.
 - What drives a discovery (agreed): **learning by doing, multiplied by spare time.** Each person's chance grows with their experience in a related sector *and* with their leisure. Someone farming all day on the edge of hunger rarely invents a plough; someone with a couple of spare hours might. This makes a feedback loop: discoveries free time, and free time breeds discoveries. It also means the poorest regions fall behind until trade or migration lifts them.
 - **?** How experience counts: a person's own years in the sector, the town's cumulative output, or both?
 - **?** Does a discovery appear everywhere at once, or start in one town and spread along trade routes?
@@ -63,10 +63,12 @@ Found in your 7,600-year no-technology run. Fixed with a sinking fund and choosi
 - [ ] Tests: there are none. Start with the loaders and a short headless run, before the big refactors.
 - [ ] Fix the three existing clippy warnings.
 - [ ] Faster headless runs (about 40 ms a year with 1,500 people).
-- [ ] A `--no-tech` flag, so long no-technology runs don't need an edited goods.ron.
 - [x] Needs-unmet, tool and specialisation lines moved off the hours chart onto their own chart.
 
 ## Ideas, not yet planned
+
+- **Births and deaths** (on the cards), starting from a smaller population. Going short of food should then carry real risk.
+- **A plough for every household.** About 750 people who farm only for themselves each own an iron plough. A tool's value scales with hours used, and there's no way to share or hire one. Historically, ploughs and teams were shared, or ploughing was hired as a service; a cottager with a small plot dug with a spade. **?** Should tools be hireable (a ploughing service, which would be tertiary work), or need a minimum farm size to pay?
 
 - Who gains: track each person's consumption and leisure to see whether gains spread evenly (the old "stage 6").
 - Merchants' own time counted in someone's day.
@@ -80,3 +82,4 @@ Found in your 7,600-year no-technology run. Fixed with a sinking fund and choosi
 - **2026-10-18:** lines moved to a separate people chart. Your long no-technology run exposed two flaws in how tools are replaced and taken up; written up under Model flaws, with three possible fixes to choose from.
 - **2026-10-18:** saving ahead and choosing jobs with their tools built. Iron ploughs now hold at about 70–87% instead of draining away. New open question on how the hungriest value tools.
 - **2026-10-18:** hungry people now value saved hours most and can invest while short. They invest their way out of hunger by year 8, so trade and migration no longer decide who escapes it. New open question on whether going short should cost anything.
+- **2026-10-18:** steady technological progress removed; the economy now settles by year 50. Found that iron-plough ownership tracks who grows their own wheat; noted ploughing-as-a-service and births and deaths under ideas.

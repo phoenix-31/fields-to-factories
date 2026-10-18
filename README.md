@@ -2,7 +2,7 @@
 
 About 1,500 people (you choose how many) are scattered over a 25 × 20 map, settling more densely on good farmland and near towns. Each splits a 16-hour waking day across the goods in an economy, trading at the nearest market town, plus leisure. Three data files define the world:
 
-- [`goods.ron`](goods.ron) holds facts about goods: what each one **provides** (wheat provides nourishment, clothing provides warmth, furniture provides comfort), how it's made, how fast its recipe improves, and how bulky it is to carry. Raw wool, wood and ore feed chains up to clothing, furniture and ploughs.
+- [`goods.ron`](goods.ron) holds facts about goods: what each one **provides** (wheat provides nourishment, clothing provides warmth, furniture provides comfort), how it's made, and how bulky it is to carry. Raw wool, wood and ore feed chains up to clothing, furniture and ploughs.
 - [`people.ron`](people.ron) holds **who** lives here and what they **want**: how many people, their needs and tastes (drawn per person from ranges), and the range of quality for each resource.
 - [`map.ron`](map.ron) holds the **geography**: terrain that decides where land, pasture, forest and ore are good, where people first settle, how crowding thins out resources, the market towns, and the cost of carrying goods.
 
@@ -14,7 +14,7 @@ Nothing is scripted. The shift out of farming comes from one relationship:
 hours farming ≈ nourishment needed ÷ (wheat per hour × tool boost)
 ```
 
-The need doesn't grow, so every gain in farm productivity frees hours for everything else. Better ploughs raise the tool boost, but an iron plough sits at the end of a chain: wood → charcoal, plus ore → iron, then iron + wood → plough. Trade lets each person take part in that chain at whichever step suits their land, forest and ore, as long as the trip to market is worth it.
+The need doesn't grow, so every gain in farm productivity frees hours for everything else. Recipes don't improve on their own: the gains come from tools, from specialising, and from trade. (Steady yearly improvement was removed because it made long runs blow up; discoveries are planned instead, see [TODO.md](TODO.md).) Better ploughs raise the tool boost, but an iron plough sits at the end of a chain: wood → charcoal, plus ore → iron, then iron + wood → plough. Trade lets each person take part in that chain at whichever step suits their land, forest and ore, as long as the trip to market is worth it.
 
 ![The window at year 98 with 1,500 people, hovering over a carpenter near Rivermouth](screenshot.png)
 
@@ -65,7 +65,6 @@ Edit any of them and press **Reset** in the app to reload all three without reco
 | `provides` | What one unit gives a person, e.g. `[("nourishment", 1.0)]`. Tools and inputs provide nothing |
 | `recipe.rate` | Units made per hour of work |
 | `recipe.uses` | A resource, e.g. `"ore"`, whose per-person quality scales the rate |
-| `recipe.improves` | Share the rate grows by each year, e.g. `0.015` for 1.5%, scaled by the "technology improves" setting |
 | `recipe.inputs` | Goods used up per unit, e.g. `[("iron", 2.0), ("wood", 2.0)]` |
 | `recipe.tools` | Tools that multiply this recipe's output; a person works with the best one they own |
 | `lifetime` | Makes the good a tool: the years it lasts before breaking, drawn from the range, e.g. `(15.0, 35.0)` |
@@ -104,30 +103,30 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
   - **Overview:** headline numbers (wheat farming, leisure, needs unmet, specialisation, work sold, time trading and carrying, people who moved home this year), the "Where the day goes" chart of hours by sector, the "How people are doing" chart (needs unmet, tool ownership, specialisation), and "Why farming shrinks", the core equation with today's numbers.
   - **Production:** the production tree with prices in a chosen town, and how many people own each tool.
   - **Towns:** people, average wage, main work and wheat price for each town.
-  - **Settings:** technology speed, time at market, carrying cost, a slider for every recipe and tool, migration (how many look, how many places, the gain needed, crowding), and the definition files with a reset button.
+  - **Settings:** time at market, carrying cost, a slider for every recipe and tool, migration (how many look, how many places, the gain needed, crowding), and the definition files with a reset button.
 
 ## Things to try
 
 - **Switch the map to "Main work".** By year 100 the fertile valley round Rivermouth farms, the sheep hills round Westmoor have become a textile district (wool, cloth, tailoring), and carpenters cluster on the forested slopes near their wood. Nothing places them; it's where their resources are.
-- **Split the chart open.** It starts with four bands: primary (farming, herding, forestry, mining), secondary (making things from raw materials), trading & carrying, and leisure. Click a band to split it, and click a part to group it again; hovering reads off the share in any year. At the top level the classic **structural transformation** shows up: primary work falls from 85% of hours in year 1 to 31% by year 100, and secondary work overtakes it around year 87.
-- **Compare wheat prices and populations on the Towns tab.** The valley town Rivermouth starts with the most people (about 470 of 1,500), and at year 100 wheat costs about 1.0 hour of work there against 1.35–1.4 in the hill towns: the price of carrying it uphill.
-- **Watch the hills go hungry, then invest their way out.** Hill farmland is poor and the valley is crowded, so nearly half of people start out unable to meet their needs. Because a hungry person values saved hours most, they put hours into a plough even while short of food. In year 2 more than a fifth of all hours go into making ploughs, and hunger is gone by about year 8, with or without trade:
+- **Split the chart open.** It starts with four bands: primary (farming, herding, forestry, mining), secondary (making things from raw materials), trading & carrying, and leisure. Click a band to split it, and click a part to group it again; hovering reads off the share in any year. At the top level, primary work falls from 86% of hours in year 1 to 47% by year 50 as ploughs spread and people specialise, then holds. Secondary work rises from 7% to 26%. Without new technology, secondary never overtakes primary.
+- **Compare wheat prices and populations on the Towns tab.** The valley town Rivermouth starts with the most people (about 470 of 1,500), and at year 100 wheat costs about 4.6 hours of work there against 5.7–6.2 in the hill towns: the price of carrying it uphill.
+- **Watch the hills go hungry, then invest their way out.** Hill farmland is poor and the valley is crowded, so nearly half of people start out unable to meet their needs. Because a hungry person values saved hours most, they put hours into a plough even while short of food. In year 2 more than a fifth of all hours go into making ploughs, and hunger is almost gone by year 20, with or without trade:
 
   | Needs unmet | Year 1 | Year 5 | Year 10 | Year 20 |
   |---|---|---|---|---|
-  | Cheap trade (5%) | 47% | 15% | 1% | 0% |
-  | Default (30%) | 48% | 15% | 1% | 0% |
-  | No trade (300%) | 49% | 17% | 1% | 0% |
+  | Cheap trade (5%) | 50% | 23% | 5% | 0.6% |
+  | Default (30%) | 50% | 22% | 6% | 1% |
+  | No trade (300%) | 51% | 25% | 6% | 3% |
 - **Change the population.** Set `count` in `people.ron` (or run with `--people-count`) and press Reset. Bigger populations give each town a deeper market; try 500 against 3000 and compare unmatched trade.
 - **Change where people settle.** In `map.ron`, raise `settlement.strength` to crowd everyone into the valleys and empty the hills, or set it to 0 to spread people evenly.
-- **Watch the drift to the valley.** People move towards cheaper wheat. Rivermouth grows from about 500 to about 910 people by year 100, while Ironhill shrinks from 300 to about 110. Moves are about 3% of people a year at first and fall below 0.5% as places even out. Farming, leisure, specialisation and hunger barely change with `chance: 0`: people invest their way out of hardship rather than leaving it.
+- **Watch the drift to the valley.** People move towards cheaper wheat. Rivermouth grows from about 500 to about 925 people by year 100 and 1,010 by year 1,000, while Ironhill shrinks from 300 to about 100. Moves are about 3% of people a year at first and fall below 0.5% as places even out. Farming, leisure, specialisation and hunger barely change with `chance: 0`: people invest their way out of hardship rather than leaving it.
 - **Turn crowding down.** At `crowding: 0` (in Settings or `map.ron`) nothing holds people back and almost everyone ends up round Rivermouth. Raising it spreads them out a little.
 
 - **Raise the carrying cost.** Trade shrinks, prices drift further apart between towns, and the regions become more self-sufficient.
 - **Move or add a town in `map.ron`,** then press Reset. Put one deep in the western hills and see whether the textile district moves with it.
-- **Watch where freed time goes.** Farming shrinks, and so does weaving, which improves fastest (2% a year). Tailoring and carpentry improve slowly (0.5%), so they hold on to workers or grow. This is **Baumol's cost disease**: labour moves into the sectors whose productivity *doesn't* rise.
+- **Watch where freed time goes.** As ploughs spread, wheat farming falls from 81% of the day to 38%. Most of the freed time goes to leisure (22% of the day) and carpentry (16%): furniture is the open-ended want, so it soaks up the time that food no longer needs.
 - **Watch years 2–10.** Cheap wooden ploughs spread first, then iron ploughs take over as a mining, charcoal and smelting chain forms. By year 50 about three-quarters of people own an iron plough, and wooden ones have almost gone.
-- **Turn technology off and run for thousands of years.** Without improvement the economy settles rather than drifts: iron-plough ownership climbs to about 87% and wheat farming holds at about 38% of the day.
+- **Run for thousands of years.** The economy settles by about year 50 and stays there: wheat farming holds at about 38% of the day, leisure at 22%, and iron-plough ownership creeps up to about 89%.
 - **Export CSV** writes `history.csv` with each good's rate and its price in every town, each sector's share of hours overall and in every town, each sector group's share (e.g. `primary/agriculture_share`), trading time, specialisation, trade carried between towns, unmatched trade and tool ownership.
 
 ## Layout
@@ -141,7 +140,7 @@ The loaders reject unknown goods, duplicate names, tools without a lifetime (or 
 | `src/people.rs` | Loads and validates the population definition; tastes and their curves |
 | `src/map.rs` | Loads the map, generates terrain and finds each spot's nearest town |
 | `src/market.rs` | Each town's prices, merchants between towns, and each person's make-or-buy routes and job choice |
-| `src/sim.rs` | People as ECS components (`Home`, `Endowments`, `Needs`, `Tastes`, `Tools`, `Job`, `Trades`, …), and the `SimTick` schedule: advance technology → plan each day → replace tools → clear the market → record history |
+| `src/sim.rs` | People as ECS components (`Home`, `Endowments`, `Needs`, `Tastes`, `Tools`, `Job`, `Trades`, …), and the `SimTick` schedule: count crowding → plan each day → replace tools → clear the market → migrate → record history |
 | `src/ui/mod.rs` | The map: terrain, towns, and each person's day or main work |
 | `src/ui/panel.rs` | Top bar, tabbed side panel, map key, hover details and the How it works window |
 | `src/ui/charts.rs` | The production tree, and the history chart with its expandable sector bands |
@@ -151,4 +150,4 @@ See [CHANGELOG.md](CHANGELOG.md) for what each stage added.
 
 ## Next: stage 6
 
-Who gains? Wages already differ a lot between people and places. Tracking each person's consumption and leisure would show whether trade and technology spread gains evenly, or whether the best-endowed places pull ahead, and what happens to the remote and the poor.
+Who gains? Wages already differ a lot between people and places. Tracking each person's consumption and leisure would show whether trade and tools spread gains evenly, or whether the best-endowed places pull ahead, and what happens to the remote and the poor.

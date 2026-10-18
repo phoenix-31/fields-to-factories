@@ -131,18 +131,6 @@ pub struct NeedsMet(pub f32);
 pub struct HourValue(pub f32);
 
 #[derive(Resource)]
-pub struct Economy {
-    pub progress: bool,
-    pub tech_speed: f32,
-}
-
-impl Default for Economy {
-    fn default() -> Self {
-        Self { progress: true, tech_speed: 1.0 }
-    }
-}
-
-#[derive(Resource)]
 pub struct Definitions {
     pub goods_path: PathBuf,
     pub people_path: PathBuf,
@@ -227,7 +215,6 @@ impl Plugin for SimPlugin {
                 travel_cost: self.map.travel_cost,
                 carried: 0.0,
             })
-            .init_resource::<Economy>()
             .init_resource::<Clock>()
             .init_resource::<History>()
             .init_resource::<Migrants>()
@@ -236,7 +223,7 @@ impl Plugin for SimPlugin {
             .add_systems(Startup, (spawn_people, open_market).chain())
             .add_systems(
                 SimTick,
-                (count_occupancy, advance_technology, allocate_time, replace_tools, clear_market, migrate, record_history)
+                (tick_clock, count_occupancy, allocate_time, replace_tools, clear_market, migrate, record_history)
                     .chain(),
             );
     }
@@ -325,14 +312,8 @@ fn open_market(
         .collect();
 }
 
-fn advance_technology(mut catalog: ResMut<Catalog>, economy: Res<Economy>, mut clock: ResMut<Clock>) {
+fn tick_clock(mut clock: ResMut<Clock>) {
     clock.year += 1;
-    if economy.progress {
-        for good in &mut catalog.goods {
-            let growth = 1.0 + good.recipe.improves * economy.tech_speed;
-            good.recipe.rate = (good.recipe.rate * growth).min(MAX_RATE);
-        }
-    }
 }
 
 fn enjoyment(tastes: &Tastes, need: &[f32], amounts: &[f32]) -> f32 {
@@ -766,7 +747,6 @@ pub fn reset(world: &mut World) {
     world.run_system_once(open_market).expect("open market");
 
     world.resource_mut::<Definitions>().version += 1;
-    world.insert_resource(Economy::default());
     world.insert_resource(Clock::default());
     world.resource_mut::<History>().0.clear();
 }

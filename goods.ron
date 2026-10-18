@@ -7,7 +7,6 @@
 // recipe:
 //   rate        units made per hour of work
 //   uses        a resource whose quality (per person, see people.ron) scales the rate
-//   improves    share the rate grows by each year, e.g. 0.015 for 1.5%
 //   inputs      goods used up per unit made, e.g. [("wood", 2.0)]
 //   tools       tools that multiply this recipe's rate; a person works with the best one they own
 // lifetime      makes the good a tool: years it lasts before it breaks, drawn from the range
@@ -23,7 +22,6 @@
         recipe: (
             rate: 0.08,
             uses: "land",
-            improves: 0.015,
             tools: [
                 (good: "wooden plough", multiplier: 1.5),
                 (good: "iron plough", multiplier: 2.5),
@@ -35,14 +33,14 @@
         sector: ["primary", "agriculture", "sheep-herding"],
         bulk: 0.5,
         color: (205, 205, 110),
-        recipe: (rate: 2.0, uses: "pasture", improves: 0.01),
+        recipe: (rate: 2.0, uses: "pasture"),
     ),
     (
         name: "cloth",
         sector: ["secondary", "textiles", "spinning & weaving"],
         bulk: 0.3,
         color: (240, 120, 90),
-        recipe: (rate: 0.5, inputs: [("wool", 2.0)], improves: 0.02),
+        recipe: (rate: 0.5, inputs: [("wool", 2.0)]),
     ),
     (
         name: "clothing",
@@ -50,7 +48,7 @@
         bulk: 0.2,
         color: (245, 175, 200),
         provides: [("warmth", 1.0)],
-        recipe: (rate: 1.0, inputs: [("cloth", 1.0)], improves: 0.005),
+        recipe: (rate: 1.0, inputs: [("cloth", 1.0)]),
     ),
     (
         name: "furniture",
@@ -58,14 +56,14 @@
         bulk: 1.0,
         color: (230, 158, 52),
         provides: [("comfort", 1.0)],
-        recipe: (rate: 1.0, inputs: [("wood", 0.5)], improves: 0.005),
+        recipe: (rate: 1.0, inputs: [("wood", 0.5)]),
     ),
     (
         name: "wood",
         sector: ["primary", "forestry"],
         bulk: 1.5,
         color: (140, 98, 57),
-        recipe: (rate: 2.0, uses: "forest", improves: 0.005),
+        recipe: (rate: 2.0, uses: "forest"),
     ),
     (
         name: "charcoal",
@@ -79,14 +77,14 @@
         sector: ["primary", "mining"],
         bulk: 2.0,
         color: (128, 146, 170),
-        recipe: (rate: 0.5, uses: "ore", improves: 0.005),
+        recipe: (rate: 0.5, uses: "ore"),
     ),
     (
         name: "iron",
         sector: ["secondary", "metals", "smelting"],
         bulk: 0.5,
         color: (200, 80, 120),
-        recipe: (rate: 0.5, inputs: [("ore", 2.0), ("charcoal", 2.0)], improves: 0.01),
+        recipe: (rate: 0.5, inputs: [("ore", 2.0), ("charcoal", 2.0)]),
     ),
     (
         name: "wooden plough",

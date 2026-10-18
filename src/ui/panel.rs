@@ -37,7 +37,6 @@ pub(super) struct PanelState {
 #[derive(SystemParam)]
 pub(super) struct Model<'w> {
     catalog: ResMut<'w, Catalog>,
-    economy: ResMut<'w, Economy>,
     markets: ResMut<'w, Markets>,
     population: ResMut<'w, Population>,
     world_map: ResMut<'w, WorldMap>,
@@ -181,7 +180,7 @@ fn side_panel(ui: &mut egui::Ui, commands: &mut Commands, model: &mut Model, vie
             (Tab::Overview, "Overview", "Headline numbers and how the day is spent over time"),
             (Tab::Production, "Production", "What's made from what, and prices in each town"),
             (Tab::Towns, "Towns", "How each market town and its surroundings make a living"),
-            (Tab::Settings, "Settings", "Technology, trade and recipe controls"),
+            (Tab::Settings, "Settings", "Trade, recipe and migration controls"),
         ] {
             ui.selectable_value(&mut view.state.tab, tab, egui::RichText::new(label).size(15.0)).on_hover_text(tip);
         }
@@ -221,8 +220,8 @@ fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>, expand
         ui,
         &format!(
             "{} people scattered over a map split their 16 waking hours between making things, \
-             trading, and leisure. As tools and technology improve, farming takes less of the day; \
-             the question is where the freed time goes.",
+             trading, and leisure. As ploughs spread and people specialise, farming takes less of \
+             the day; the question is where the freed time goes.",
             people.iter().count()
         ),
     );
@@ -427,16 +426,6 @@ fn settings(ui: &mut egui::Ui, commands: &mut Commands, model: &mut Model) {
     let percent = |v: f64, _| format!("{:.0}%", v * 100.0);
     let parse_percent = |s: &str| s.trim_end_matches('%').trim().parse::<f64>().ok().map(|v| v / 100.0);
 
-    ui.heading("Technology");
-    note(ui, "Each recipe improves at its own yearly rate, set in goods.ron. This scales all of them.");
-    ui.horizontal(|ui| {
-        ui.checkbox(&mut model.economy.progress, "Technology improves")
-            .on_hover_text("Untick to freeze every recipe at today's rates.");
-        ui.add(egui::DragValue::new(&mut model.economy.tech_speed).range(0.0..=5.0).speed(0.02).suffix("× normal speed"))
-            .on_hover_text("1× uses the rates in goods.ron; 2× doubles every rate of improvement.");
-    });
-
-    ui.add_space(10.0);
     ui.heading("Trade");
     note(ui, "What it costs to use a market, paid in time rather than money.");
     ui.add(
