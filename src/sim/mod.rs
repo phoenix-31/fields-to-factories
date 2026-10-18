@@ -2,12 +2,14 @@
 //! definition files. People split a 16-hour day across the catalog's goods and leisure.
 
 mod history;
+mod life;
 mod person;
 mod place;
 mod plan;
 mod trade;
 
 pub use history::*;
+pub use life::*;
 pub use person::*;
 pub use place::*;
 use plan::*;
@@ -112,11 +114,23 @@ impl Plugin for SimPlugin {
             .init_resource::<History>()
             .init_resource::<Migrants>()
             .init_resource::<Occupancy>()
+            .init_resource::<Lineage>()
             .insert_resource(WorldRng(Rng(SEED)))
             .add_systems(Startup, (spawn_people, open_market).chain())
             .add_systems(
                 SimTick,
-                (tick_clock, count_occupancy, allocate_time, replace_tools, clear_market, migrate, record_history)
+                (
+                    tick_clock,
+                    grow_up,
+                    count_occupancy,
+                    gather_dependents,
+                    allocate_time,
+                    replace_tools,
+                    clear_market,
+                    migrate,
+                    births_and_deaths,
+                    record_history,
+                )
                     .chain(),
             );
     }

@@ -50,6 +50,16 @@ pub enum Taste {
 }
 
 impl Taste {
+    pub fn blend(&self, other: &Taste) -> Taste {
+        match (*self, *other) {
+            (Taste::Log { weight: a }, Taste::Log { weight: b }) => Taste::Log { weight: (a + b) / 2.0 },
+            (Taste::Saturating { weight: a, scale }, Taste::Saturating { weight: b, .. }) => {
+                Taste::Saturating { weight: (a + b) / 2.0, scale }
+            }
+            (own, _) => own,
+        }
+    }
+
     pub fn value(&self, amount: f32) -> f32 {
         match *self {
             Taste::Log { weight } => weight * (1.0 + amount).ln(),
@@ -71,10 +81,69 @@ impl Default for Migration {
     }
 }
 
+#[derive(Clone, Copy, Deserialize)]
+pub struct Life {
+    pub start_age: Spread,
+    pub adult_at: u32,
+    pub old_at: u32,
+    pub old_work: f32,
+    pub child_needs: f32,
+    pub fertile: (u32, u32),
+    pub birth_chance: f32,
+    pub spare_half: f32,
+    pub child_death: f32,
+    pub adult_death: f32,
+    pub ageing: f32,
+    pub hunger_death: f32,
+}
+
+impl Default for Life {
+    fn default() -> Self {
+        Self {
+            start_age: Spread::Range(15.0, 35.0),
+            adult_at: 12,
+            old_at: 55,
+            old_work: 0.5,
+            child_needs: 0.25,
+            fertile: (16, 40),
+            birth_chance: 0.3,
+            spare_half: 2.0,
+            child_death: 0.02,
+            adult_death: 0.01,
+            ageing: 0.07,
+            hunger_death: 0.2,
+        }
+    }
+}
+
+impl Life {
+    pub fn child_share(&self, age: u32) -> f32 {
+        let grown = age as f32 / self.adult_at.max(1) as f32;
+        self.child_needs + (1.0 - self.child_needs) * grown.min(1.0)
+    }
+
+    pub fn death_chance(&self, age: u32, needs_met: f32) -> f32 {
+        let base = if age < self.adult_at {
+            self.child_death
+        } else {
+            self.adult_death * (self.ageing * (age as f32 - 30.0)).exp()
+        };
+        (base + self.hunger_death * (1.0 - needs_met).max(0.0)).min(1.0)
+    }
+
+    pub fn birth_chance(&self, age: u32, needs_met: f32, spare_hours: f32) -> f32 {
+        if age < self.fertile.0 || age > self.fertile.1 {
+            return 0.0;
+        }
+        self.birth_chance * needs_met.min(1.0) * spare_hours / (spare_hours + self.spare_half.max(1e-6))
+    }
+}
+
 #[derive(Resource, Clone)]
 pub struct Population {
     pub count: Spread,
     pub migration: Migration,
+    pub life: Life,
     pub endowments: Vec<Spread>,
     pub leisure: Spread,
     pub discount_rate: f32,
@@ -88,6 +157,8 @@ struct PopulationDef {
     count: Spread,
     #[serde(default)]
     migration: Migration,
+    #[serde(default)]
+    life: Life,
     endowments: Vec<(String, Spread)>,
     leisure: Spread,
     discount_rate: f32,
@@ -108,7 +179,7 @@ struct PreferenceDef {
 }
 
 fn default_count() -> Spread {
-    Spread::Fixed(1500.0)
+    Spread::Fixed(300.0)
 }
 
 impl Population {
@@ -146,9 +217,18 @@ impl Population {
         if !(0.0..=1.0).contains(&m.chance) || m.min_gain < 0.0 {
             return Err("migration chance must be between 0 and 1, and min_gain can't be negative".into());
         }
+        let l = def.life;
+        let chances = [l.birth_chance, l.child_death, l.adult_death, l.hunger_death, l.old_work];
+        if chances.iter().any(|c| !(0.0..=1.0).contains(c)) || !(0.0..=1.0).contains(&l.child_needs) {
+            return Err("life chances, old_work and child_needs must be between 0 and 1".into());
+        }
+        if l.adult_at >= l.old_at || l.fertile.0 > l.fertile.1 || l.start_age.min() < l.adult_at as f32 {
+            return Err("life ages must run adult_at < old_at, with fertile (from, to) and start_age adults".into());
+        }
         Ok(Self {
             count: def.count,
             migration: def.migration,
+            life: def.life,
             endowments,
             leisure: def.leisure,
             discount_rate: def.discount_rate,

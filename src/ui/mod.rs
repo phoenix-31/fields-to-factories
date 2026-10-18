@@ -18,11 +18,14 @@ const CELL: f32 = 22.0;
 const MARK_WIDTH: f32 = 6.0;
 const MARK_HEIGHT: f32 = 13.0;
 const GAP: f32 = 6.0;
+const CHILD_MARK: f32 = 3.0;
 
 const LEISURE_COLOR: [u8; 3] = [78, 140, 230];
 const TRADING_COLOR: [u8; 3] = [64, 196, 180];
 const HUNGRY_COLOR: [u8; 3] = [214, 64, 64];
 const SPECIALISATION_COLOR: [u8; 3] = [250, 250, 250];
+const CHILD_COLOR: [u8; 3] = [235, 225, 200];
+const POPULATION_COLOR: [u8; 3] = [240, 200, 120];
 
 #[derive(Resource, Default)]
 struct ShownTown(usize);
@@ -87,7 +90,7 @@ impl Plugin for UiPlugin {
             .init_resource::<Expanded>()
             .init_resource::<panel::PanelState>()
             .add_systems(Startup, setup_cameras)
-            .add_systems(Update, (drive_sim, rebuild_bars, move_marks, draw_days).chain())
+            .add_systems(Update, (drive_sim, rebuild_bars, attach_marks, move_marks, draw_days).chain())
             .add_systems(EguiPrimaryContextPass, panel::layout);
     }
 }
@@ -142,9 +145,7 @@ fn terrain_color(elevation: f32) -> Color {
 fn rebuild_bars(
     mut commands: Commands,
     definitions: Res<Definitions>,
-    catalog: Res<Catalog>,
     world_map: Res<WorldMap>,
-    people: Query<(Entity, &Person)>,
     features: Query<Entity, With<MapFeature>>,
     mut shown: ResMut<ShownTown>,
     mut expanded: ResMut<Expanded>,
@@ -184,6 +185,9 @@ fn rebuild_bars(
             Transform::from_translation((at + Vec2::new(0.0, CELL)).extend(3.0)),
         ));
     }
+}
+
+fn attach_marks(mut commands: Commands, catalog: Res<Catalog>, people: Query<(Entity, &Person), Added<Person>>) {
     for (entity, person) in &people {
         let pos = map_position(person.x, person.y);
         commands
@@ -235,7 +239,7 @@ fn draw_days(
     population: Res<Population>,
     view: Res<MapView>,
     expanded: Res<Expanded>,
-    people: Query<(&TimeUse, &NeedsMet)>,
+    people: Query<(&TimeUse, &NeedsMet, Has<Child>)>,
     mut segments: Query<(&DaySegment, &ChildOf, &mut Sprite, &mut Transform)>,
 ) {
     let shown = visible_sectors(&catalog, &expanded);
@@ -247,10 +251,17 @@ fn draw_days(
         })
         .collect();
     for (segment, child_of, mut sprite, mut transform) in &mut segments {
-        let Ok((time, needs_met)) = people.get(child_of.parent()) else {
+        let Ok((time, needs_met, child)) = people.get(child_of.parent()) else {
             continue;
         };
         if time.hours.len() != catalog.len() {
+            continue;
+        }
+        if child {
+            let first = matches!(*segment, DaySegment::Slot(0));
+            sprite.custom_size = Some(if first { Vec2::splat(CHILD_MARK) } else { Vec2::ZERO });
+            sprite.color = srgb(CHILD_COLOR);
+            transform.translation.y = -MARK_HEIGHT / 2.0;
             continue;
         }
         let hours_in = |slot: usize| catalog.sectors[shown[slot]].goods.iter().map(|&g| time.hours[g]).sum::<f32>();

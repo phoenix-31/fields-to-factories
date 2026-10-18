@@ -1,4 +1,4 @@
-//! A person: the components each one carries, how the population is first spawned, and tools wearing out.
+//! A person: the components each one carries, how the first population is spawned, and tools wearing out.
 
 use super::*;
 
@@ -20,7 +20,7 @@ pub struct Endowments(pub Vec<f32>);
 #[derive(Component)]
 pub struct Needs(pub Vec<(CharId, f32)>);
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Tastes {
     pub preferences: Vec<(CharId, Taste)>,
     pub leisure: f32,
@@ -80,6 +80,25 @@ pub struct NeedsMet(pub f32);
 #[derive(Component)]
 pub struct HourValue(pub f32);
 
+#[derive(Component, Clone, Copy)]
+pub struct Age(pub u32);
+
+#[derive(Component, Clone, Copy)]
+pub struct Child {
+    pub fed_by: Entity,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct Family {
+    pub parent: Option<Entity>,
+}
+
+#[derive(Component, Default)]
+pub struct Dependents {
+    pub count: u32,
+    pub needs: Vec<f32>,
+}
+
 pub(super) fn spawn_people(
     mut commands: Commands,
     mut rng: ResMut<WorldRng>,
@@ -92,15 +111,24 @@ pub(super) fn spawn_people(
     for index in 0..people {
         let (pick, jx, jy) = (rng.0.next_f32(), rng.0.next_f32(), rng.0.next_f32());
         let at = world_map.settle(pick, jx, jy);
-        let seed = SEED ^ (index as u64).wrapping_mul(0xA24B_AED4_963E_E407);
-        commands.spawn(new_person(at, seed, &mut rng.0, &catalog, &population, &world_map));
+        let age = population.life.start_age.draw(rng.0.next_f32()).round() as u32;
+        commands.spawn(new_person(at, person_seed(index as u64), &mut rng.0, None, &catalog, &population, &world_map)).insert((
+            Age(age),
+            Family { parent: None },
+        ));
     }
+    commands.insert_resource(Lineage { next_id: people as u64, ..default() });
+}
+
+pub(super) fn person_seed(id: u64) -> u64 {
+    SEED ^ id.wrapping_mul(0xA24B_AED4_963E_E407)
 }
 
 pub(super) fn new_person(
     (x, y): (f32, f32),
     seed: u64,
     rng: &mut Rng,
+    parent: Option<&Tastes>,
     catalog: &Catalog,
     population: &Population,
     world_map: &WorldMap,
@@ -111,7 +139,7 @@ pub(super) fn new_person(
         population.endowments.iter().zip(&world_map.fields).map(|(spread, field)| spread.draw(field[spot])).collect();
     let needs: Vec<(CharId, f32)> =
         population.needs.iter().map(|&(c, amount)| (c, amount.draw(rng.next_f32()))).collect();
-    let preferences = population
+    let mut preferences: Vec<(CharId, Taste)> = population
         .preferences
         .iter()
         .map(|&(c, curve)| {
@@ -122,7 +150,13 @@ pub(super) fn new_person(
             (c, taste)
         })
         .collect();
-    let leisure = population.leisure.draw(rng.next_f32());
+    let mut leisure = population.leisure.draw(rng.next_f32());
+    if let Some(parent) = parent {
+        for ((_, taste), (_, inherited)) in preferences.iter_mut().zip(&parent.preferences) {
+            *taste = taste.blend(inherited);
+        }
+        leisure = (leisure + parent.leisure) / 2.0;
+    }
     let (town, distance) = world_map.nearest_town((x, y));
     (
         (Person { x, y }, Home { town, distance }, Endowments(endowments), Needs(needs)),
@@ -137,6 +171,7 @@ pub(super) fn new_person(
         NeedsMet::default(),
         HourValue(INITIAL_HOUR_VALUE),
         PersonRng(Rng(seed)),
+        Dependents { count: 0, needs: vec![0.0; population.needs.len()] },
     )
 }
 

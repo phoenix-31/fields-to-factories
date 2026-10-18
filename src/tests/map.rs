@@ -51,11 +51,13 @@ fn crowding_thins_resources_past_capacity() {
     let m = map();
     let spot = 5 * COLS + 5;
     let empty = vec![0.0; COLS * ROWS];
-    assert_eq!(m.crowding_factor(spot, &empty, 0.0, 3.0), 1.0);
+    assert_eq!(m.crowding_factor(spot, &empty, 0.0), 1.0);
 
     let mean_weight = m.settle_weights.iter().sum::<f32>() / m.settle_weights.len() as f32;
-    let double: Vec<f32> = m.settle_weights.iter().map(|w| 2.0 * 3.0 * w / mean_weight).collect();
-    assert!((m.crowding_factor(spot, &double, 0.0, 3.0) - 0.5).abs() < 1e-4);
+    let full: Vec<f32> = m.settle_weights.iter().map(|w| m.capacity * w / mean_weight).collect();
+    assert!((m.crowding_factor(spot, &full, 0.0) - 1.0).abs() < 1e-4);
+    let double: Vec<f32> = full.iter().map(|c| 2.0 * c).collect();
+    assert!((m.crowding_factor(spot, &double, 0.0) - 0.5).abs() < 1e-4);
 }
 
 #[test]

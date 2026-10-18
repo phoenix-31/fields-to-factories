@@ -1,5 +1,27 @@
 # Changelog
 
+## Births and deaths
+
+### Added
+- **People are born, grow up and die.** A run starts with about 300 adults aged 15–35 (`count: 300`), and the population grows into the land.
+  - **Births:** each adult aged 16–40 has a yearly chance of a child, up to 30%, scaled by how well they eat and how much spare time they have (2 hours of leisure halves it).
+  - **Children** are born beside their parent, with tastes halfway between the parent's and a fresh draw. They don't work; their needs, a quarter of an adult's at birth and rising to all of them at 12, are added to the parent's, so each child lengthens the parent's working day.
+  - **Old age:** from 55, people work half days.
+  - **Deaths:** 2% a year for a child, 1% for an adult at 30, rising 7% for each year older, plus up to 20% more for a household meeting none of its needs.
+  - **Inheritance:** a dying person's eldest child inherits their tools and savings, and takes on any children they were feeding; if the heir is a child, the nearest adult does.
+- **`life`** in `people.ron` holds all of these settings, and a **Births and deaths** group in Settings changes the main chances live.
+- **Absolute land capacity:** `capacity` in `map.ron` (default 3 people per cell, more on better land) sets where crowding starts. Before, crowding was measured against the current average, which couldn't limit growth.
+- **Panel:** a births and deaths card, a **Population** chart (people, children, births and deaths), ages and children in the hover details, and children drawn as small dots beside their parent.
+- **CSV:** `population`, `children`, `births` and `deaths` columns. Time shares, hunger and tool ownership now cover adults only.
+- **8 more tests** (42 in all): death and birth chances, children's needs, inherited tastes and tools, the population ledger (each year's population is last year's plus births minus deaths), children being fed and growing up, and a well-fed population growing.
+
+### Results
+- **A Malthusian ceiling.** From 300, numbers dip in the hungry first years, reach about 630 by year 100 and level off at 1,050–1,100 from year 300. Doubling the land's capacity roughly doubles the ceiling; with crowding off, growth doesn't stop.
+- **The gains go into people, not leisure.** With 300 people who never change, farming settles at 34% of the day, leisure at 23% and no one goes hungry. With births and deaths, by year 300 farming takes 50% of adults' day, leisure 14%, and 7–8% of households go short: hunger settles at the margin where deaths balance births.
+- About 40% of people are children, typical of a pre-industrial population.
+- Rivermouth grows to well over half the population; smaller towns mean thinner markets, with 7–9% of trade unmatched.
+- 600 years take about 13 seconds.
+
 ## Tests
 
 ### Added

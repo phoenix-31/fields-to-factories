@@ -92,22 +92,18 @@ Things any option needs: stable market ids, a CSV and Towns tab that cope with m
 
 - [x] Chosen: **emergent market towns** (option 1). After births and deaths.
 
-## Next: births and deaths
+## Births and deaths: done
 
-Chosen as the next stage. Agreed design:
+See the CHANGELOG. Settled while building: a child costs a quarter of an adult's needs at birth, rising to all of them at 12; no sexes or couples; the eldest living child inherits. Calibrated so 300 people grow to a ceiling of about 1,050–1,100.
 
-- **Start with about 300 people** and let the population grow into the land.
-- **Living standards drive both.** Each year a base chance of each. Going short of food raises the chance of dying; meeting needs with spare time raises the chance of a birth. Crowding thins resources as numbers grow, so growth slows on its own (a Malthusian ceiling).
-- **Ages:** childhood, working life, old age. Children don't work and must be fed by a parent: their needs are added to the parent's. Adults work. The old work fewer hours, and their chance of dying rises with age.
-- **A newborn** is born beside a parent, with tastes drawn close to the parent's, and becomes an independent adult with their own job when grown.
-- **Inheritance:** when a parent dies, their tools and savings pass to a child, so wealth can build up in families.
+Follow-ups:
 
-Still to settle while building:
-
-- **?** How much a child costs: a fraction of an adult's needs, rising with age?
-- **?** No sexes or couples for now: each adult can have a child. OK?
-- **?** Who inherits: the eldest living child, or split between children?
-- Needs a seed source for newborns that keeps runs repeatable, plus a population line, births and deaths per year, and an age chart in the UI and CSV.
+- [ ] **Nobody looks after the old.** From 55 people work half days, and many can't grow enough food alone. Grown children should help their parents, just as parents feed children.
+- [ ] **No couples:** each child has one parent who bears its whole cost. Couples would share it and make households a real unit.
+- [ ] **Child labour:** children don't work until 12. Historically they helped on the farm from about 7.
+- [ ] **A slow start:** the founders are all adults of similar age, so births dip around year 25 while the first children are still too young. A starting population with children and a spread of ages would smooth it.
+- [ ] **Runaway growth with crowding at 0** slows the app to a crawl. Cap the population, or warn in Settings.
+- [ ] **Thin markets:** with about 1,000 people in four towns, 7–9% of trade is unmatched. Emergent markets may help.
 
 ## Ideas, not yet planned
 
@@ -129,3 +125,4 @@ Still to settle while building:
 - **2026-10-18:** 34 tests added and the old lint warnings fixed. Refactors flagged, each tied to the feature that needs it. Emergent markets written up with three options.
 - **2026-10-18:** chose emergent market towns, and births and deaths as the next stage. Split `sim.rs` and added `new_person` in preparation. Open questions on births and deaths written up.
 - **2026-10-18:** births and deaths designed: start at 300, living standards drive births and deaths, ages with dependent children, newborns beside a parent with similar tastes, and inheritance of tools.
+- **2026-10-18:** births and deaths built. Population grows from 300 to a Malthusian ceiling of about 1,050–1,100, and gains turn into people rather than leisure. Follow-ups noted, starting with care for the old.

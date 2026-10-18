@@ -26,7 +26,7 @@ pub(super) fn open_market(
         .collect();
 }
 
-pub(super) fn clear_market(mut markets: ResMut<Markets>, catalog: Res<Catalog>, people: Query<(&Home, &Trades, &Wage)>) {
+pub(super) fn clear_market(mut markets: ResMut<Markets>, catalog: Res<Catalog>, people: Query<(&Home, &Trades, &Wage), Without<Child>>) {
     let n = catalog.len();
     let towns = markets.towns.len();
     let (mut bought, mut sold) = (vec![vec![0.0; n]; towns], vec![vec![0.0; n]; towns]);

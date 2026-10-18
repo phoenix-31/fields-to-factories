@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContext, EguiContexts, egui};
 
-use super::charts::{people_chart, production_tree, sector_legend, stacked_chart};
+use super::charts::{people_chart, population_chart, production_tree, sector_legend, stacked_chart};
 use super::{
     CELL, Expanded, GAP, HUNGRY_COLOR, LEISURE_COLOR, MapView, PANEL_WIDTH, ShownTown, SimSpeed, TRADING_COLOR, color32,
     lighten, swatch,
@@ -67,6 +67,9 @@ pub(super) struct PersonView {
     needs_met: &'static NeedsMet,
     moves: &'static Moves,
     crowding: &'static Crowding,
+    age: &'static Age,
+    child: Has<Child>,
+    dependents: &'static Dependents,
 }
 
 pub(super) fn layout(
@@ -217,10 +220,12 @@ fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>, expand
     note(
         ui,
         &format!(
-            "{} people scattered over a map split their 16 waking hours between making things, \
-             trading, and leisure. As ploughs spread and people specialise, farming takes less of \
-             the day; the question is where the freed time goes.",
-            people.iter().count()
+            "{} people, {} of them children, live scattered over a map. Adults split their 16 waking \
+             hours between making things, trading, and leisure, and feed their children. As ploughs \
+             spread and people specialise, farming takes less of the day; the question is where the \
+             freed time goes.",
+            people.iter().count(),
+            people.iter().filter(|p| p.child).count()
         ),
     );
     ui.add_space(6.0);
@@ -249,7 +254,13 @@ fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>, expand
         stat(ui, pct(last.traded), "of work is sold", "Value of goods sold at market, in hours of work, as a share of all hours worked.");
         stat(ui, pct(last.trading_share), "spent trading & carrying", "Share of waking hours spent at market and carrying goods to and from town.");
         ui.end_row();
-        stat(ui, format!("{:.1}%", last.moved * 100.0), "moved home this year", "Share of people who moved to a place where meeting their needs takes fewer hours.");
+        stat(ui, format!("{:.1}%", last.moved * 100.0), "moved home this year", "Share of adults who moved to a place where meeting their needs takes fewer hours.");
+        stat(
+            ui,
+            format!("{:.0} / {:.0}", last.births, last.deaths),
+            "births / deaths this year",
+            "Children born and people who died this year. Births rise with spare time; deaths rise with age and hunger.",
+        );
         ui.end_row();
     });
     ui.add_space(4.0);
@@ -275,6 +286,11 @@ fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>, expand
     note(ui, "Shares of people: those who can't meet their needs, and those owning each tool. Specialisation is the share of a person's work in their biggest sector, on average.");
     people_chart(ui, &model.catalog, &model.history);
 
+    ui.add_space(10.0);
+    ui.heading("Population");
+    note(ui, "Everyone alive, how many are children, and births and deaths each year. Growth slows as crowding thins out the land.");
+    population_chart(ui, &model.history);
+
     ui.add_space(6.0);
     egui::CollapsingHeader::new("Why farming shrinks").show(ui, |ui| farming_equation(ui, model, people));
 }
@@ -288,7 +304,7 @@ fn staples(model: &Model) -> Vec<GoodId> {
 
 fn farming_equation(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>) {
     let catalog = &model.catalog;
-    let n = people.iter().count() as f32;
+    let n = people.iter().filter(|p| !p.child).count().max(1) as f32;
     for &(c, _) in &model.population.needs {
         let Some(id) = (0..catalog.len())
             .filter(|&g| catalog.provided(g, c) > 0.0 && catalog.goods[g].recipe.inputs.is_empty())
@@ -301,7 +317,7 @@ fn farming_equation(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>
         };
         let good = &catalog.goods[id];
         let (mut needed, mut actual, mut amount, mut boost) = (0.0, 0.0, 0.0, 0.0);
-        for p in people {
+        for p in people.iter().filter(|p| !p.child) {
             if p.time.hours.len() != catalog.len() || p.tools.years_left.len() != catalog.len() {
                 return;
             }
@@ -472,12 +488,23 @@ fn settings(ui: &mut egui::Ui, commands: &mut Commands, model: &mut Model) {
         );
 
     ui.add_space(10.0);
-    ui.heading("People");
+    ui.heading("Births and deaths");
     note(
         ui,
-        "How many people there are, and where they first settle, is set in people.ron (count) and map.ron \
-         (settlement). Changes apply on Reset; --people-count overrides the count from the command line.",
+        "Yearly chances, live. How many people a run starts with, and where they first settle, are set in \
+         people.ron (count) and map.ron (settlement) and apply on Reset; --people-count overrides the count.",
     );
+    let life = &mut model.population.life;
+    ui.add(egui::Slider::new(&mut life.birth_chance, 0.0..=1.0).custom_formatter(percent).custom_parser(parse_percent).text("births at most"))
+        .on_hover_text("Yearly chance of a child for an adult aged 16 to 40 who meets their needs with plenty of spare time. Less spare time, fewer births.");
+    ui.add(egui::Slider::new(&mut life.child_death, 0.0..=0.2).custom_formatter(percent).custom_parser(parse_percent).text("child deaths"))
+        .on_hover_text("Yearly chance a well-fed child dies.");
+    ui.add(egui::Slider::new(&mut life.adult_death, 0.0..=0.1).custom_formatter(percent).custom_parser(parse_percent).text("adult deaths at 30"))
+        .on_hover_text("Yearly chance a well-fed 30-year-old dies. It grows with age.");
+    ui.add(egui::Slider::new(&mut life.hunger_death, 0.0..=1.0).custom_formatter(percent).custom_parser(parse_percent).text("hunger deaths"))
+        .on_hover_text("Extra yearly chance of dying for a household meeting none of its needs; half that for one meeting half.");
+    ui.add(egui::Slider::new(&mut model.world_map.capacity, 0.5..=10.0).text("people per cell the land supports"))
+        .on_hover_text("How many people an average cell feeds before crowding thins out its resources. This sets how large the population can grow. With crowding at 0, nothing stops it.");
 
     ui.add_space(10.0);
     ui.heading("Definition files");
@@ -562,8 +589,20 @@ fn hover_details(
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.set_max_width(280.0);
                 let town = model.markets.towns.get(p.home.town).map_or("?", |t| t.name.as_str());
-                ui.label(egui::RichText::new(format!("Person at {:.1}, {:.1}", p.person.x, p.person.y)).strong());
+                if p.child {
+                    ui.label(egui::RichText::new(format!("Child, age {}", p.age.0)).strong());
+                    ui.label(format!("Fed by a parent, near {town}"));
+                    if p.needs_met.0 < 0.999 {
+                        ui.colored_label(color32(HUNGRY_COLOR), "Going short of food");
+                    }
+                    return;
+                }
+                ui.label(egui::RichText::new(format!("Age {}, at {:.1}, {:.1}", p.age.0, p.person.x, p.person.y)).strong());
                 ui.label(format!("Trades at {town}, {:.1} cells away", p.home.distance));
+                if p.dependents.count > 0 {
+                    let s = if p.dependents.count == 1 { "" } else { "ren" };
+                    ui.label(format!("Feeds {} child{s}", p.dependents.count));
+                }
                 let resources: Vec<String> = catalog
                     .resources
                     .iter()
@@ -639,6 +678,7 @@ fn how_it_works(ctx: &egui::Context, open: &mut bool) {
                 ui.label("• Makes or buys each good, whichever costs them fewer hours, given their land, pasture, forest and ore.");
                 ui.label("• Earns money at one job, the good they sell, and now and then reconsiders it.");
                 ui.label("• Now and then looks at other places and moves if meeting their needs there would take clearly fewer hours.");
+                ui.label("• Feeds their children, and may have another if they have time to spare.");
                 ui.add_space(6.0);
                 ui.heading("Markets and towns");
                 ui.label(
@@ -654,6 +694,15 @@ fn how_it_works(ctx: &egui::Context, open: &mut bool) {
                      making each good as you would. People drift towards places where that is lower. But \
                      land is shared: where more people live than the land supports, each gets less of it, \
                      so the best valleys fill up rather than taking everyone.",
+                );
+                ui.add_space(6.0);
+                ui.heading("Births and deaths");
+                ui.label(
+                    "Children are born beside a parent, with tastes close to theirs, and are fed by them \
+                     until they are 12, so each child adds to the parent's working day. Spare time makes \
+                     a birth more likely; age and going short of food make death more likely. As numbers \
+                     grow, crowding thins out the land, food takes longer to grow, and growth slows. When \
+                     someone dies, their tools pass to their eldest child.",
                 );
                 ui.add_space(6.0);
                 ui.heading("Reading the map");

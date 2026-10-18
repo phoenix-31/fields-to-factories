@@ -4,7 +4,7 @@ use bevy_egui::egui;
 use egui_plot::{FilledArea, HoverPosition, Line, Plot, PlotPoints};
 
 use super::{
-    Expanded, HUNGRY_COLOR, LEISURE_COLOR, SPECIALISATION_COLOR, TRADING_COLOR, color32, lighten, sector_swatch, swatch,
+    CHILD_COLOR, Expanded, HUNGRY_COLOR, POPULATION_COLOR, LEISURE_COLOR, SPECIALISATION_COLOR, TRADING_COLOR, color32, lighten, sector_swatch, swatch,
     visible_sectors,
 };
 use crate::goods::{Catalog, GoodId, SectorId};
@@ -242,6 +242,39 @@ pub(super) fn people_chart(ui: &mut egui::Ui, catalog: &Catalog, history: &Histo
     ui.horizontal_wrapped(|ui| {
         for (name, color, dashed) in &names {
             swatch(ui, *color, &if *dashed { format!("{name} (dashed)") } else { name.clone() });
+        }
+    });
+}
+
+pub(super) fn population_chart(ui: &mut egui::Ui, history: &History) {
+    let samples = &history.0;
+    let series = |value: &dyn Fn(&crate::sim::Sample) -> f32| -> PlotPoints {
+        samples.iter().map(|s| [s.year as f64, value(s) as f64]).collect()
+    };
+    let lines = [
+        ("people", POPULATION_COLOR, series(&|s| s.population)),
+        ("children", CHILD_COLOR, series(&|s| s.children)),
+        ("births a year", LEISURE_COLOR, series(&|s| s.births)),
+        ("deaths a year", HUNGRY_COLOR, series(&|s| s.deaths)),
+    ];
+    let names: Vec<(&str, [u8; 3])> = lines.iter().map(|l| (l.0, l.1)).collect();
+    year_plot("population", "people")
+        .height(180.0)
+        .y_axis_min_width(30.0)
+        .label_formatter(|hover| match hover {
+            HoverPosition::NearDataPoint { plot_name, position, .. } => {
+                Some(format!("{plot_name}\n{:.0} in year {:.0}", position.y, position.x))
+            }
+            HoverPosition::Elsewhere { .. } => None,
+        })
+        .show(ui, |plot| {
+            for (name, color, points) in lines {
+                plot.line(Line::new(name, points).color(color32(color)).width(2.0));
+            }
+        });
+    ui.horizontal_wrapped(|ui| {
+        for (name, color) in &names {
+            swatch(ui, *color, name);
         }
     });
 }

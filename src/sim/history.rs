@@ -1,4 +1,5 @@
-//! Yearly samples of how time is spent, prices, tools and towns, and writing them out as CSV.
+//! Yearly samples of how working-age people spend their time, prices, tools, towns, births and deaths,
+//! and writing them out as CSV.
 
 use super::*;
 
@@ -19,6 +20,10 @@ pub struct Sample {
     pub mismatch: f32,
     pub moved: f32,
     pub town_people: Vec<f32>,
+    pub population: f32,
+    pub children: f32,
+    pub births: f32,
+    pub deaths: f32,
 }
 
 #[derive(Resource, Default)]
@@ -29,16 +34,25 @@ pub(super) fn record_history(
     catalog: Res<Catalog>,
     markets: Res<Markets>,
     migrants: Res<Migrants>,
+    lineage: Res<Lineage>,
     mut history: ResMut<History>,
-    people: Query<(&TimeUse, &NeedsMet, &Tools, &Home)>,
+    people: Query<(&TimeUse, &NeedsMet, &Tools, &Home, Has<Child>)>,
 ) {
     let goods = catalog.len();
     let towns = markets.towns.len();
     let (mut town_hours, mut town_people) = (vec![vec![0.0; goods]; towns], vec![0.0f32; towns]);
+    let mut town_workers = vec![0.0f32; towns];
     let (mut hours, mut coverage) = (vec![0.0; goods], vec![0.0; goods]);
-    let (mut trading, mut leisure, mut hungry, mut specialisation, mut n) = (0.0, 0.0, 0.0, 0.0, 0.0);
-    for (time, needs_met, tools, home) in &people {
+    let (mut trading, mut leisure, mut hungry, mut specialisation, mut n) = (0.0, 0.0, 0.0, 0.0, 0.0f32);
+    let (mut population, mut children) = (0.0, 0.0);
+    for (time, needs_met, tools, home, child) in &people {
         town_people[home.town] += 1.0;
+        population += 1.0;
+        if child {
+            children += 1.0;
+            continue;
+        }
+        town_workers[home.town] += 1.0;
         for good in 0..goods {
             hours[good] += time.hours[good];
             town_hours[home.town][good] += time.hours[good];
@@ -55,6 +69,7 @@ pub(super) fn record_history(
         }
         n += 1.0;
     }
+    let n = f32::max(n, 1.0);
     let total_hours = n * WAKING_HOURS;
     let worked_hours: f32 = hours.iter().sum();
     let traded_hours: f32 = markets
@@ -69,7 +84,7 @@ pub(super) fn record_history(
         shares: hours.iter().map(|h| h / total_hours).collect(),
         town_shares: town_hours
             .iter()
-            .zip(&town_people)
+            .zip(&town_workers)
             .map(|(h, p)| h.iter().map(|x| x / (p * WAKING_HOURS).max(1e-6)).collect())
             .collect(),
         trading_share: trading / total_hours,
@@ -82,6 +97,10 @@ pub(super) fn record_history(
         mismatch: markets.mismatch(),
         moved: migrants.0 as f32 / n,
         town_people: town_people.clone(),
+        population,
+        children,
+        births: lineage.births as f32,
+        deaths: lineage.deaths as f32,
     });
 }
 
@@ -122,6 +141,7 @@ pub fn write_csv(
     for g in catalog.goods.iter().filter(|g| g.is_tool()) {
         header.push(format!("{}_coverage", g.name));
     }
+    header.extend(["population", "children", "births", "deaths"].map(String::from));
     writeln!(out, "{}", header.join(","))?;
 
     for s in samples {
@@ -142,6 +162,7 @@ pub fn write_csv(
                 row.push(format!("{:.4}", s.coverage[good]));
             }
         }
+        row.extend([s.population, s.children, s.births, s.deaths].map(|v| format!("{v:.0}")));
         writeln!(out, "{}", row.join(","))?;
     }
     Ok(())

@@ -6,16 +6,41 @@
 //                 Log(weight)               always wanted, each extra unit worth a bit less
 //                 Saturating(weight, scale) wanted until about `scale` extra, then barely
 // leisure       weight on free time (Log)
-// count         how many people live on the map (a range is drawn once per Reset)
+// count         how many people the map starts with (a range is drawn once per Reset)
 // migration     each year, `chance` of people look at `look_at` random places and move to the best
 //               if it would cut the hours they need to meet their needs by at least `min_gain`
+// life          births, deaths and ages:
+//                 start_age     ages of the first people (all adults)
+//                 adult_at      age children start working and stop being fed by a parent
+//                 old_at        age people start working less: old_work of a full day
+//                 child_needs   share of an adult's needs a newborn has, rising to all of them by adult_at
+//                 fertile       ages (from, to) people can have a child
+//                 birth_chance  yearly chance of a child for someone who meets their needs with lots of
+//                               spare time; spare_half hours of leisure halves it
+//                 child_death, adult_death   yearly chance of dying, for children and for adults at 30;
+//                               an adult's chance grows by ageing (a share) for each year older
+//                 hunger_death  extra yearly chance of dying for a household meeting none of its needs
 // endowments    range of quality for each resource; where a person falls in it depends on the terrain
 //               where they live (see map.ron)
 // discount_rate how much less next year matters; with wear, sets how far ahead tools are valued
 
 (
-    count: 1500,
+    count: 300,
     migration: (chance: 0.05, look_at: 6, min_gain: 0.1),
+    life: (
+        start_age: (15, 35),
+        adult_at: 12,
+        old_at: 55,
+        old_work: 0.5,
+        child_needs: 0.25,
+        fertile: (16, 40),
+        birth_chance: 0.3,
+        spare_half: 2.0,
+        child_death: 0.02,
+        adult_death: 0.01,
+        ageing: 0.07,
+        hunger_death: 0.2,
+    ),
     endowments: [
         ("land", (0.3, 1.7)),
         ("pasture", (0.3, 1.7)),

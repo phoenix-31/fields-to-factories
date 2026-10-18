@@ -9,12 +9,11 @@ pub struct Migrants(pub usize);
 #[derive(Resource, Default)]
 pub struct Occupancy {
     pub counts: Vec<f32>,
-    pub average: f32,
 }
 
 impl Occupancy {
     fn factor(&self, world_map: &WorldMap, spot: usize, extra: f32) -> f32 {
-        world_map.crowding_factor(spot, &self.counts, extra, self.average)
+        world_map.crowding_factor(spot, &self.counts, extra)
     }
 }
 
@@ -23,7 +22,6 @@ pub(super) fn count_occupancy(mut occupancy: ResMut<Occupancy>, mut people: Quer
     for (person, _) in &people {
         counts[WorldMap::spot(person.x, person.y)] += 1.0;
     }
-    occupancy.average = counts.iter().sum::<f32>() / counts.len() as f32;
     occupancy.counts = counts;
     for (person, mut crowding) in &mut people {
         crowding.0 = occupancy.factor(&world_map, WorldMap::spot(person.x, person.y), 0.0);
@@ -38,16 +36,10 @@ pub(super) fn migrate(
     world_map: Res<WorldMap>,
     occupancy: Res<Occupancy>,
     mut migrants: ResMut<Migrants>,
-    mut people: Query<(
-        &mut Person,
-        &mut Home,
-        &mut Endowments,
-        &mut Moves,
-        &mut PersonRng,
-        &Needs,
-        &Tools,
-        &TimeUse,
-    )>,
+    mut people: Query<
+        (&mut Person, &mut Home, &mut Endowments, &mut Moves, &mut PersonRng, &Needs, &Tools, &TimeUse),
+        Without<Child>,
+    >,
 ) {
     let rules = population.migration;
     let moved = std::sync::atomic::AtomicUsize::new(0);

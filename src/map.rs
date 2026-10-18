@@ -48,10 +48,16 @@ struct MapDef {
     settlement: Settlement,
     #[serde(default = "default_crowding")]
     crowding: f32,
+    #[serde(default = "default_capacity")]
+    capacity: f32,
 }
 
 fn default_crowding() -> f32 {
     1.0
+}
+
+fn default_capacity() -> f32 {
+    3.0
 }
 
 #[derive(Resource, Clone)]
@@ -61,6 +67,7 @@ pub struct WorldMap {
     pub elevation: Vec<f32>,
     pub fields: Vec<Vec<f32>>,
     pub crowding: f32,
+    pub capacity: f32,
     settle_weights: Vec<f32>,
 }
 
@@ -99,6 +106,9 @@ impl WorldMap {
         if def.crowding < 0.0 {
             return Err("crowding can't be negative".into());
         }
+        if def.capacity <= 0.0 {
+            return Err("capacity must be above zero".into());
+        }
         if def.travel_cost < 0.0 {
             return Err("travel_cost can't be negative".into());
         }
@@ -127,7 +137,7 @@ impl WorldMap {
                 normalise(shaped.collect())
             })
             .collect();
-        let mut map = Self { towns: def.towns, travel_cost: def.travel_cost, elevation, fields, crowding: def.crowding, settle_weights: Vec::new() };
+        let mut map = Self { towns: def.towns, travel_cost: def.travel_cost, elevation, fields, crowding: def.crowding, capacity: def.capacity, settle_weights: Vec::new() };
         let follows = def.settlement.follows.as_ref().and_then(|n| catalog.resources.iter().position(|r| r == n));
         map.settle_weights = (0..ROWS * COLS)
             .map(|spot| {
@@ -178,12 +188,12 @@ impl WorldMap {
             .map(|(c, r)| r as usize * COLS + c as usize)
     }
 
-    pub fn crowding_factor(&self, spot: usize, counts: &[f32], extra: f32, average: f32) -> f32 {
+    pub fn crowding_factor(&self, spot: usize, counts: &[f32], extra: f32) -> f32 {
         let mean_weight = self.settle_weights.iter().sum::<f32>() / self.settle_weights.len() as f32;
         let (mut occupants, mut capacity) = (extra, 0.0);
         for s in Self::neighbourhood(spot) {
             occupants += counts.get(s).copied().unwrap_or(0.0);
-            capacity += average * self.settle_weights[s] / mean_weight.max(1e-6);
+            capacity += self.capacity * self.settle_weights[s] / mean_weight.max(1e-6);
         }
         let excess = (occupants - capacity).max(0.0) / capacity.max(1e-6);
         1.0 / (1.0 + self.crowding * excess)

@@ -32,6 +32,7 @@ pub(super) struct Situation<'a> {
     owned: &'a [f32],
     last_year: &'a TimeUse,
     work_hours: f32,
+    work_slices: usize,
     hour_value: f32,
     discount_rate: f32,
 }
@@ -119,7 +120,7 @@ pub(super) fn plan_day(p: &Situation) -> DayPlan {
         }
     };
 
-    let short = hours_for_needs(catalog, p.routes, &p.needs.0) > WAKING_HOURS;
+    let short = hours_for_needs(catalog, p.routes, &p.needs.0) > p.work_slices as f32 * SLICE;
     let best_tool = |plan: &DayPlan| {
         (0..n)
             .filter(|&t| catalog.goods[t].is_tool() && unit_hours[t].is_finite())
@@ -129,7 +130,7 @@ pub(super) fn plan_day(p: &Situation) -> DayPlan {
             .map(|(t, _)| t)
     };
 
-    let mut slices = SLICES;
+    let mut slices = p.work_slices;
     for &(c, amount) in &p.needs.0 {
         let cheapest = (0..n)
             .filter(|&g| catalog.provided(g, c) > 0.0 && unit_hours[g].is_finite())
@@ -167,6 +168,7 @@ pub(super) fn plan_day(p: &Situation) -> DayPlan {
         }
     }
 
+    plan.time.leisure += (SLICES - p.work_slices) as f32 * SLICE;
     plan.needs_met = p.needs.0.iter().map(|&(c, amount)| amounts[c] / amount).fold(1.0, f32::min);
     plan.hour_value = if plan.needs_met < 0.999 {
         leisure_value(p.tastes, SLICE) / SLICE / plan.needs_met.max(0.1)
@@ -192,9 +194,17 @@ pub(super) struct Planner {
     time: &'static mut TimeUse,
     needs_met: &'static mut NeedsMet,
     hour_value: &'static mut HourValue,
+    age: &'static Age,
+    dependents: &'static Dependents,
 }
 
-pub(super) fn allocate_time(catalog: Res<Catalog>, markets: Res<Markets>, population: Res<Population>, mut people: Query<Planner>) {
+pub(super) fn allocate_time(
+    catalog: Res<Catalog>,
+    markets: Res<Markets>,
+    population: Res<Population>,
+    mut people: Query<Planner, Without<Child>>,
+) {
+    let life = population.life;
     people.par_iter_mut().for_each(|mut p| {
         let owned = p.tools.owned();
         let review = (p.rng.0.next_f32() < JOB_REVIEW_CHANCE).then(|| p.rng.0.next_f32());
@@ -203,15 +213,18 @@ pub(super) fn allocate_time(catalog: Res<Catalog>, markets: Res<Markets>, popula
         let endowments = effective(&p.endowments.0, p.crowding.0);
         let routes = plan_routes(&catalog, &access, &endowments, &owned, p.job.0, review, work_hours);
         p.job.0 = routes.job;
+        let household = Needs(p.needs.0.iter().zip(&p.dependents.needs).map(|(&(c, own), &kids)| (c, own + kids)).collect());
+        let work_slices = if p.age.0 >= life.old_at { (SLICES as f32 * life.old_work).round() as usize } else { SLICES };
         let plan = plan_day(&Situation {
             catalog: &catalog,
             routes: &routes,
-            needs: p.needs,
+            needs: &household,
             tastes: p.tastes,
             tools: &p.tools,
             owned: &owned,
             last_year: &p.time,
             work_hours,
+            work_slices,
             hour_value: p.hour_value.0,
             discount_rate: population.discount_rate,
         });
