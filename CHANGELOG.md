@@ -1,5 +1,22 @@
 # Changelog
 
+## Migration
+
+### Added
+- **People move towards better real wages.** Each year about 5% of people look at 6 random places and move to the best if meeting their needs there takes at least 10% fewer hours. Hours are worked out the way they'd really get each good there: making or buying it, with that place's resources, its town's prices and the walk to market. Settings and `migration` in `people.ron` control it; `chance: 0` turns it off.
+- **Crowding.** Where more people live round a spot (it and its eight neighbours) than the settlement pattern expects, each gets proportionally less of every resource. `crowding` in `map.ron` (default 1) and a Settings slider set how strongly. Without it, about 1,350 of 1,500 people moved to Rivermouth.
+- **Panel:** a "moved home this year" card, migration and crowding sliders, and hover details showing how often someone has moved and how much crowding cuts their resources. Marks move on the map when people do.
+- **CSV:** `moved` (share of people who moved that year) and each town's population.
+
+### Changed
+- **Default speed is 5 years a second,** and the slider goes up to 30.
+
+### Results
+- **The valley fills.** Rivermouth grows from about 500 to 890 people by year 100 and 950 by year 200; Ironhill falls from 300 to about 110, Crossways to about 220 and Westmoor to about 270. About 3% of people move a year at first, falling below 0.5%.
+- **Hardship clears faster.** At year 20, 1% can't meet their needs, against 9% with migration off.
+- **Crowding raises early hardship.** In year 1, 48% can't meet their needs, against 36% without crowding, because random settlement packs some spots tighter than the land supports.
+- Farming, leisure and specialisation are almost unchanged: 21%, 29% and 57% at year 100, with or without migration.
+
 ## Free settlement and a bigger population
 
 ### Changed

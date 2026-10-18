@@ -58,9 +58,23 @@ impl Taste {
     }
 }
 
+#[derive(Clone, Copy, Deserialize)]
+pub struct Migration {
+    pub chance: f32,
+    pub look_at: usize,
+    pub min_gain: f32,
+}
+
+impl Default for Migration {
+    fn default() -> Self {
+        Self { chance: 0.05, look_at: 6, min_gain: 0.1 }
+    }
+}
+
 #[derive(Resource, Clone)]
 pub struct Population {
     pub count: Spread,
+    pub migration: Migration,
     pub endowments: Vec<Spread>,
     pub leisure: Spread,
     pub discount_rate: f32,
@@ -72,6 +86,8 @@ pub struct Population {
 struct PopulationDef {
     #[serde(default = "default_count")]
     count: Spread,
+    #[serde(default)]
+    migration: Migration,
     endowments: Vec<(String, Spread)>,
     leisure: Spread,
     discount_rate: f32,
@@ -126,8 +142,13 @@ impl Population {
         if def.count.min() < 1.0 {
             return Err("count must be at least 1".into());
         }
+        let m = def.migration;
+        if !(0.0..=1.0).contains(&m.chance) || m.min_gain < 0.0 {
+            return Err("migration chance must be between 0 and 1, and min_gain can't be negative".into());
+        }
         Ok(Self {
             count: def.count,
+            migration: def.migration,
             endowments,
             leisure: def.leisure,
             discount_rate: def.discount_rate,

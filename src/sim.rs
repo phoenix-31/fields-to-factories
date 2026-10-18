@@ -10,7 +10,7 @@ use bevy::prelude::*;
 
 use crate::goods::{Catalog, CharId, GoodId};
 use crate::map::{self, WorldMap};
-use crate::market::{Markets, Routes, Town, autarky_prices, plan_routes};
+use crate::market::{BEST_JOB, Markets, Routes, Town, autarky_prices, hours_for_needs, plan_routes};
 use crate::people::{Curve, Population, Taste};
 
 pub const WAKING_HOURS: f32 = 16.0;
@@ -98,6 +98,31 @@ pub struct Wage(pub f32);
 pub struct Job(pub Option<GoodId>);
 
 #[derive(Component, Default)]
+pub struct Moves(pub u32);
+
+#[derive(Resource, Default)]
+pub struct Migrants(pub usize);
+
+#[derive(Component)]
+pub struct Crowding(pub f32);
+
+#[derive(Resource, Default)]
+pub struct Occupancy {
+    pub counts: Vec<f32>,
+    pub average: f32,
+}
+
+impl Occupancy {
+    fn factor(&self, world_map: &WorldMap, spot: usize, extra: f32) -> f32 {
+        world_map.crowding_factor(spot, &self.counts, extra, self.average)
+    }
+}
+
+fn effective(endowments: &[f32], crowding: f32) -> Vec<f32> {
+    endowments.iter().map(|e| e * crowding).collect()
+}
+
+#[derive(Component, Default)]
 pub struct NeedsMet(pub f32);
 
 #[derive(Component)]
@@ -144,6 +169,8 @@ pub struct Sample {
     pub traded: f32,
     pub carried: f32,
     pub mismatch: f32,
+    pub moved: f32,
+    pub town_people: Vec<f32>,
 }
 
 #[derive(Resource, Default)]
@@ -201,11 +228,14 @@ impl Plugin for SimPlugin {
             .init_resource::<Economy>()
             .init_resource::<Clock>()
             .init_resource::<History>()
+            .init_resource::<Migrants>()
+            .init_resource::<Occupancy>()
             .insert_resource(WorldRng(Rng(SEED)))
             .add_systems(Startup, (spawn_people, open_market).chain())
             .add_systems(
                 SimTick,
-                (advance_technology, allocate_time, replace_tools, clear_market, record_history).chain(),
+                (count_occupancy, advance_technology, allocate_time, replace_tools, clear_market, migrate, record_history)
+                    .chain(),
             );
     }
 }
@@ -258,6 +288,8 @@ fn spawn_people(
                 Trades { bought: vec![0.0; n], sold: vec![0.0; n] },
                 Wage::default(),
                 Job::default(),
+                Moves::default(),
+                Crowding(1.0),
                 TimeUse::new(n),
                 NeedsMet::default(),
                 HourValue(INITIAL_HOUR_VALUE),
@@ -443,13 +475,25 @@ fn plan_day(p: &Situation) -> DayPlan {
     plan
 }
 
+fn count_occupancy(mut occupancy: ResMut<Occupancy>, mut people: Query<(&Person, &mut Crowding)>, world_map: Res<WorldMap>) {
+    let mut counts = vec![0.0; POPULATION_COLS * POPULATION_ROWS];
+    for (person, _) in &people {
+        counts[WorldMap::spot(person.x, person.y)] += 1.0;
+    }
+    occupancy.average = counts.iter().sum::<f32>() / counts.len() as f32;
+    occupancy.counts = counts;
+    for (person, mut crowding) in &mut people {
+        crowding.0 = occupancy.factor(&world_map, WorldMap::spot(person.x, person.y), 0.0);
+    }
+}
+
 fn allocate_time(
     catalog: Res<Catalog>,
     markets: Res<Markets>,
     population: Res<Population>,
     mut people: Query<(
         &Home,
-        &Endowments,
+        (&Endowments, &Crowding),
         &Needs,
         &Tastes,
         &mut Tools,
@@ -465,7 +509,7 @@ fn allocate_time(
     people.par_iter_mut().for_each(
         |(
             home,
-            endowments,
+            (endowments, crowding),
             needs,
             tastes,
             mut tools,
@@ -480,7 +524,7 @@ fn allocate_time(
             let owned = tools.owned();
             let review = (rng.0.next_f32() < JOB_REVIEW_CHANCE).then(|| rng.0.next_f32());
             let access = markets.access(&catalog, home.town, home.distance);
-            let routes = plan_routes(&catalog, &access, &endowments.0, &owned, job.0, review);
+            let routes = plan_routes(&catalog, &access, &effective(&endowments.0, crowding.0), &owned, job.0, review);
             job.0 = routes.job;
             let plan = plan_day(&Situation {
                 catalog: &catalog,
@@ -540,10 +584,73 @@ fn clear_market(mut markets: ResMut<Markets>, catalog: Res<Catalog>, people: Que
     markets.clear(&catalog, bought, sold, wages / count.max(1.0));
 }
 
+#[allow(clippy::type_complexity)]
+fn migrate(
+    catalog: Res<Catalog>,
+    markets: Res<Markets>,
+    population: Res<Population>,
+    world_map: Res<WorldMap>,
+    occupancy: Res<Occupancy>,
+    mut migrants: ResMut<Migrants>,
+    mut people: Query<(
+        &mut Person,
+        &mut Home,
+        &mut Endowments,
+        &mut Moves,
+        &mut PersonRng,
+        &Needs,
+        &Tools,
+    )>,
+) {
+    let rules = population.migration;
+    let moved = std::sync::atomic::AtomicUsize::new(0);
+    people.par_iter_mut().for_each(|(mut person, mut home, mut endowments, mut moves, mut rng, needs, tools)| {
+        if rules.chance <= 0.0 || rng.0.next_f32() >= rules.chance {
+            return;
+        }
+        let owned = tools.owned();
+        let score = |endowments: &[f32], town: usize, distance: f32| {
+            let access = markets.access(&catalog, town, distance);
+            let routes = plan_routes(&catalog, &access, endowments, &owned, None, BEST_JOB);
+            hours_for_needs(&catalog, &routes, &needs.0)
+        };
+        let spot_here = WorldMap::spot(person.x, person.y);
+        let here = score(&effective(&endowments.0, occupancy.factor(&world_map, spot_here, 0.0)), home.town, home.distance);
+        let mut best: Option<(f32, (f32, f32), Vec<f32>, usize, f32)> = None;
+        for _ in 0..rules.look_at {
+            let at = world_map.settle(rng.0.next_f32(), rng.0.next_f32(), rng.0.next_f32());
+            let spot = WorldMap::spot(at.0, at.1);
+            let there: Vec<f32> = population
+                .endowments
+                .iter()
+                .zip(&world_map.fields)
+                .map(|(spread, field)| spread.draw(field[spot]))
+                .collect();
+            let (town, distance) = world_map.nearest_town(at);
+            let extra = if spot == spot_here { 0.0 } else { 1.0 };
+            let hours = score(&effective(&there, occupancy.factor(&world_map, spot, extra)), town, distance);
+            if best.as_ref().is_none_or(|b| hours < b.0) {
+                best = Some((hours, at, there, town, distance));
+            }
+        }
+        if let Some((hours, at, there, town, distance)) = best
+            && hours < here * (1.0 - rules.min_gain)
+        {
+            (person.x, person.y) = at;
+            endowments.0 = there;
+            *home = Home { town, distance };
+            moves.0 += 1;
+            moved.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    });
+    migrants.0 = moved.into_inner();
+}
+
 fn record_history(
     clock: Res<Clock>,
     catalog: Res<Catalog>,
     markets: Res<Markets>,
+    migrants: Res<Migrants>,
     mut history: ResMut<History>,
     people: Query<(&TimeUse, &NeedsMet, &Tools, &Home)>,
 ) {
@@ -595,6 +702,8 @@ fn record_history(
         traded: (traded_hours / worked_hours.max(1e-6)).min(1.0),
         carried: markets.carried / traded_hours.max(1e-6),
         mismatch: markets.mismatch(),
+        moved: migrants.0 as f32 / n,
+        town_people: town_people.clone(),
     });
 }
 
@@ -662,9 +771,12 @@ pub fn write_csv(
         }
     }
     header.extend(
-        ["trading_share", "leisure_share", "hungry_share", "specialisation", "traded", "carried", "mismatch"]
+        ["trading_share", "leisure_share", "hungry_share", "specialisation", "traded", "carried", "mismatch", "moved"]
             .map(String::from),
     );
+    for town in towns {
+        header.push(format!("{town}: people"));
+    }
     for g in catalog.goods.iter().filter(|g| g.is_tool()) {
         header.push(format!("{}_coverage", g.name));
     }
@@ -676,9 +788,10 @@ pub fn write_csv(
         row.extend(s.prices.iter().flatten().map(|v| format!("{v:.4}")));
         row.extend(s.shares.iter().map(|v| format!("{v:.4}")));
         row.extend(s.town_shares.iter().flatten().map(|v| format!("{v:.4}")));
-        for v in [s.trading_share, s.leisure_share, s.hungry_share, s.specialisation, s.traded, s.carried, s.mismatch] {
+        for v in [s.trading_share, s.leisure_share, s.hungry_share, s.specialisation, s.traded, s.carried, s.mismatch, s.moved] {
             row.push(format!("{v:.4}"));
         }
+        row.extend(s.town_people.iter().map(|v| format!("{v:.0}")));
         for (good, def) in catalog.goods.iter().enumerate() {
             if def.is_tool() {
                 row.push(format!("{:.4}", s.coverage[good]));

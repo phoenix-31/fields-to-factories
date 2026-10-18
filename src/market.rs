@@ -3,12 +3,13 @@
 
 use bevy::prelude::*;
 
-use crate::goods::{Catalog, GoodId};
+use crate::goods::{Catalog, CharId, GoodId};
 
 const PRICE_SPEED: f32 = 0.2;
 const JOB_SPREAD: f32 = 0.1;
 const BUY_SPREAD: f32 = 0.1;
 const ROUTE_PASSES: usize = 4;
+pub const BEST_JOB: Option<f32> = Some(-1.0);
 
 pub struct Town {
     pub name: String,
@@ -273,6 +274,9 @@ fn choose_job(earning: &dyn Fn(GoodId) -> f32, n: usize, draw: f32) -> Option<Go
     if best <= 1e-6 {
         return None;
     }
+    if draw < 0.0 {
+        return (0..n).max_by(|&a, &b| earning(a).total_cmp(&earning(b)));
+    }
     let weights: Vec<f32> = (0..n)
         .map(|g| {
             let e = earning(g);
@@ -287,6 +291,18 @@ fn choose_job(earning: &dyn Fn(GoodId) -> f32, n: usize, draw: f32) -> Option<Go
         }
     }
     weights.iter().rposition(|&w| w > 0.0)
+}
+
+pub fn hours_for_needs(catalog: &Catalog, routes: &Routes, needs: &[(CharId, f32)]) -> f32 {
+    needs
+        .iter()
+        .map(|&(c, amount)| {
+            (0..catalog.len())
+                .filter(|&g| catalog.provided(g, c) > 0.0)
+                .map(|g| amount * routes.unit_hours[g] / catalog.provided(g, c))
+                .fold(f32::INFINITY, f32::min)
+        })
+        .sum()
 }
 
 pub fn autarky_prices(catalog: &Catalog, endowments: &[Vec<f32>]) -> Vec<f32> {

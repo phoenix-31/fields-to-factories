@@ -14,6 +14,7 @@ use super::{
     lighten, swatch,
 };
 use crate::goods::{Catalog, GoodId};
+use crate::map::WorldMap;
 use crate::market::Markets;
 use crate::people::Population;
 use crate::sim::*;
@@ -38,7 +39,8 @@ pub(super) struct Model<'w> {
     catalog: ResMut<'w, Catalog>,
     economy: ResMut<'w, Economy>,
     markets: ResMut<'w, Markets>,
-    population: Res<'w, Population>,
+    population: ResMut<'w, Population>,
+    world_map: ResMut<'w, WorldMap>,
     definitions: Res<'w, Definitions>,
     clock: Res<'w, Clock>,
     history: Res<'w, History>,
@@ -63,6 +65,8 @@ pub(super) struct PersonView {
     wage: &'static Wage,
     job: &'static Job,
     needs_met: &'static NeedsMet,
+    moves: &'static Moves,
+    crowding: &'static Crowding,
 }
 
 pub(super) fn layout(
@@ -138,7 +142,7 @@ fn top_bar(ui: &mut egui::Ui, commands: &mut Commands, model: &Model, view: &mut
         if ui.button("+1 year").on_hover_text("Advance exactly one year, useful while paused.").clicked() {
             commands.queue(|world: &mut World| world.run_schedule(SimTick));
         }
-        ui.add(egui::Slider::new(&mut speed.years_per_second, 1.0..=60.0).suffix(" yrs/s").show_value(true))
+        ui.add(egui::Slider::new(&mut speed.years_per_second, 1.0..=30.0).suffix(" yrs/s").show_value(true))
             .on_hover_text("How many simulated years pass each real second.");
         ui.separator();
         if ui
@@ -239,6 +243,8 @@ fn overview(ui: &mut egui::Ui, model: &Model, people: &Query<PersonView>) {
         ui.end_row();
         stat(ui, pct(last.traded), "of work is sold", "Value of goods sold at market, in hours of work, as a share of all hours worked.");
         stat(ui, pct(last.trading_share), "spent trading & carrying", "Share of waking hours spent at market and carrying goods to and from town.");
+        ui.end_row();
+        stat(ui, format!("{:.1}%", last.moved * 100.0), "moved home this year", "Share of people who moved to a place where meeting their needs takes fewer hours.");
         ui.end_row();
     });
     ui.add_space(4.0);
@@ -432,10 +438,30 @@ fn settings(ui: &mut egui::Ui, commands: &mut Commands, model: &mut Model) {
     }
 
     ui.add_space(10.0);
+    ui.heading("Migration");
+    note(
+        ui,
+        "Each year some people look at other places and move if they could meet their needs in fewer \
+         hours there. Crowding stops everyone piling into the best valley.",
+    );
+    let migration = &mut model.population.migration;
+    ui.add(egui::Slider::new(&mut migration.chance, 0.0..=0.5).custom_formatter(percent).custom_parser(parse_percent).text("look each year"))
+        .on_hover_text("Share of people who consider moving each year. 0% turns migration off.");
+    ui.add(egui::Slider::new(&mut migration.look_at, 1..=20).text("places compared"))
+        .on_hover_text("How many random places each of them looks at, drawn from the settlement pattern.");
+    ui.add(egui::Slider::new(&mut migration.min_gain, 0.0..=0.5).custom_formatter(percent).custom_parser(parse_percent).text("gain needed to move"))
+        .on_hover_text("How much fewer hours a new place must need to meet their needs before they bother moving.");
+    ui.add(egui::Slider::new(&mut model.world_map.crowding, 0.0..=4.0).text("crowding"))
+        .on_hover_text(
+            "How fast resources thin out when more people live round a spot than the settlement pattern \
+             expects. 0 means no limit; at 1, twice as crowded leaves each person two thirds as much.",
+        );
+
+    ui.add_space(10.0);
     ui.heading("People");
     note(
         ui,
-        "How many people there are, and where they settle, is set in people.ron (count) and map.ron \
+        "How many people there are, and where they first settle, is set in people.ron (count) and map.ron \
          (settlement). Changes apply on Reset; --people-count overrides the count from the command line.",
     );
 
@@ -526,6 +552,12 @@ fn hover_details(
                     .map(|(name, q)| format!("{name} {q:.2}"))
                     .collect();
                 ui.label(format!("Resources: {}", resources.join(" · ")));
+                if p.crowding.0 < 0.995 {
+                    ui.label(format!("Crowded: resources at {:.0}%", p.crowding.0 * 100.0));
+                }
+                if p.moves.0 > 0 {
+                    ui.label(format!("Moved {} time{}", p.moves.0, if p.moves.0 == 1 { "" } else { "s" }));
+                }
                 match p.job.0 {
                     Some(job) => ui.label(format!("Sells {} · wage {:.2}", catalog.goods[job].name, p.wage.0)),
                     None => ui.label("Self-sufficient: not yet trading"),
@@ -587,6 +619,7 @@ fn how_it_works(ctx: &egui::Context, open: &mut bool) {
                 ui.label("• Spends spare quarter-hours on whatever their own tastes value most: better food, clothes, furniture, leisure, or tools that save time later.");
                 ui.label("• Makes or buys each good, whichever costs them fewer hours, given their land, pasture, forest and ore.");
                 ui.label("• Earns money at one job, the good they sell, and now and then reconsiders it.");
+                ui.label("• Now and then looks at other places and moves if meeting their needs there would take clearly fewer hours.");
                 ui.add_space(6.0);
                 ui.heading("Markets and towns");
                 ui.label(
@@ -594,6 +627,14 @@ fn how_it_works(ctx: &egui::Context, open: &mut bool) {
                      goods home; heavy goods cost more to carry. Each town's prices rise when more is \
                      wanted than offered, and merchants ship goods between towns when the price gap \
                      pays for the trip.",
+                );
+                ui.add_space(6.0);
+                ui.heading("Moving and crowding");
+                ui.label(
+                    "A place's real wage is how many hours it takes to meet your needs there, buying or \
+                     making each good as you would. People drift towards places where that is lower. But \
+                     land is shared: where more people live than the land supports, each gets less of it, \
+                     so the best valleys fill up rather than taking everyone.",
                 );
                 ui.add_space(6.0);
                 ui.heading("Reading the map");

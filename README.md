@@ -4,7 +4,7 @@ About 1,500 people (you choose how many) are scattered over a 25 × 20 map, sett
 
 - [`goods.ron`](goods.ron) holds facts about goods: what each one **provides** (food provides nourishment, clothing provides warmth, furniture provides comfort), how it's made, how fast its recipe improves, and how bulky it is to carry. Raw wool, wood and ore feed chains up to clothing, furniture and ploughs.
 - [`people.ron`](people.ron) holds **who** lives here and what they **want**: how many people, their needs and tastes (drawn per person from ranges), and the range of quality for each resource.
-- [`map.ron`](map.ron) holds the **geography**: terrain that decides where land, pasture, forest and ore are good, where people settle, the market towns, and the cost of carrying goods.
+- [`map.ron`](map.ron) holds the **geography**: terrain that decides where land, pasture, forest and ore are good, where people first settle, how crowding thins out resources, the market towns, and the cost of carrying goods.
 
 People work out for themselves what any good is worth to them, including tools, which provide nothing directly but save hours. Every good can be made or bought, whichever costs that person fewer hours, so people with good land end up farming for others and people near rich ore end up mining.
 
@@ -41,6 +41,8 @@ The first build compiles Bevy and takes several minutes. On Linux you also need 
 6. **Gradual choices.** The cheaper buying is compared with making, the larger the share of a good a person buys, rather than everyone flipping at once.
 7. **Distance.** Everyone trades at their nearest town. Buyers carry goods home and sellers carry goods to market, each costing `travel_cost` × the good's `bulk` × the distance in hours. Far from town, buying and selling cost more, so people make more for themselves.
 8. **Jobs.** A person's job is the good they make to sell; their wage is what an hour of it earns after paying for bought inputs. People start out self-sufficient. Each year about one in five reviews their job and picks one, where better-paying jobs are more likely but not certain.
+9. **Migration.** Each year about one in twenty people look at a handful of other places and move to the best if it clearly beats home. "Best" means a **real wage**: the hours it would take to meet their needs there, making or buying each good as they would, with that place's resources, town prices and carrying distance. Moving takes their position and nothing else; their tools and tastes come with them.
+10. **Crowding.** Land is shared. When more people live round a spot (it and its eight neighbours) than the settlement pattern expects, everyone there gets less of every resource: at `crowding: 1`, twice as many people leave each with two thirds as much. Without it, about 1,350 of 1,500 people ended up round Rivermouth.
 
 ## Markets and towns
 
@@ -72,6 +74,7 @@ Edit any of them and press **Reset** in the app to reload all three without reco
 | Field | Meaning |
 |---|---|
 | `count` | How many people live on the map; a fixed number, or a range drawn once per Reset. Default 1500 |
+| `migration` | Each year, `chance` of people look at `look_at` random places (drawn from the settlement pattern) and move to the best if it cuts the hours they need to meet their needs by at least `min_gain`. `chance: 0` turns it off |
 | `endowments` | Range of quality for each resource (`land`, `pasture`, `forest`, `ore`); where in the range a person falls depends on the terrain where they live. Must be above zero |
 | `needs` | Amount of a characteristic needed per day; met before anything else, in the order listed (nourishment, then warmth) |
 | `preferences` | Enjoyment beyond the need: `Log(weight)` is always wanted at a falling rate; `Saturating(weight, scale)` is wanted until about `scale` extra |
@@ -87,32 +90,35 @@ Edit any of them and press **Reset** in the app to reload all three without reco
 | `towns` | Market towns, by name and `(column, row)` from the top-left |
 | `travel_cost` | Hours to carry one unit of bulk one cell |
 | `settlement` | Where people choose to live: denser where the `follows` resource is good (`strength` 0 ignores it; higher crowds the best spots) and up to `1 + near_towns` times denser right beside a town |
+| `crowding` | How fast resources thin out where more people live than the settlement pattern expects; 0 never, 1 (default) leaves two thirds each at twice the expected density |
 
 The loaders reject unknown goods, duplicate names, tools without a lifetime (or one under a year) or with a multiplier below 1, recipes that are inputs to themselves, wants no good provides, resources with no endowment, towns off the map, terrain or settlement for resources no recipe uses, and a count below 1.
 
 ## The window
 
-- **Top bar:** run or pause, step one year, simulation speed, reset (reloading the definition files), export CSV, and **How it works**, a short guide to the model.
-- **Map:** each small mark is one person, placed where they live; several can share a cell. The key in its corner switches between **Each day** (a bar of their 16 waking hours, work at the bottom, leisure on top) and **Main work** (coloured by their biggest sector, like a land-use map), and opens a colour key. The ground shows terrain: yellow-green valleys, dark green forest, grey hills; diamonds are market towns. **Hover over anyone** to ring them and see their resources, town, job, wage, how they spent the day and which tools they own.
+- **Top bar:** run or pause, step one year, simulation speed (5 years a second by default, up to 30), reset (reloading the definition files), export CSV, and **How it works**, a short guide to the model.
+- **Map:** each small mark is one person, placed where they live; several can share a cell. The key in its corner switches between **Each day** (a bar of their 16 waking hours, work at the bottom, leisure on top) and **Main work** (coloured by their biggest sector, like a land-use map), and opens a colour key. The ground shows terrain: yellow-green valleys, dark green forest, grey hills; diamonds are market towns. **Hover over anyone** to ring them and see their resources, town, job, wage, how they spent the day, which tools they own, how often they've moved, and how much crowding cuts their resources.
 - **Side panel tabs.** Hover over almost anything for an explanation.
-  - **Overview:** headline numbers (farming, leisure, needs unmet, specialisation, work sold, time trading and carrying), the "Where the day goes" chart, and "Why farming shrinks", the core equation with today's numbers.
+  - **Overview:** headline numbers (farming, leisure, needs unmet, specialisation, work sold, time trading and carrying, people who moved home this year), the "Where the day goes" chart, and "Why farming shrinks", the core equation with today's numbers.
   - **Production:** the production tree with prices in a chosen town, and how many people own each tool.
   - **Towns:** people, average wage, main work and food price for each town.
-  - **Settings:** technology speed, time at market, carrying cost, a slider for every recipe and tool, and the definition files with a reset button.
+  - **Settings:** technology speed, time at market, carrying cost, a slider for every recipe and tool, migration (how many look, how many places, the gain needed, crowding), and the definition files with a reset button.
 
 ## Things to try
 
 - **Switch the map to "Main work".** By year 100 the fertile valley round Rivermouth farms, the sheep hills round Westmoor have become a textile district (wool, cloth, tailoring), and carpenters cluster on the forested slopes near their wood. Nothing places them; it's where their resources are.
-- **Compare food prices and populations on the Towns tab.** The valley town Rivermouth has the most people (about 470 of 1,500), and at year 100 food costs about 1.2 hours of work there against 1.7–1.9 in the hill towns: the price of carrying it uphill.
-- **Watch the hills go hungry, then recover.** Hill farmland is poor, so about 36% of people start out unable to meet their needs. Trade lets them sell wool, wood or furniture and buy food:
+- **Compare food prices and populations on the Towns tab.** The valley town Rivermouth starts with the most people (about 470 of 1,500), and at year 100 food costs about 1.4 hours of work there against 1.7–1.8 in the hill towns: the price of carrying it uphill.
+- **Watch the hills go hungry, then recover.** Hill farmland is poor and the valley is crowded, so nearly half of people start out unable to meet their needs. Trade lets them sell wool, wood or furniture and buy food, and migration lets them leave:
 
-  | Needs unmet | Year 10 | Year 20 | Year 30 |
-  |---|---|---|---|
-  | Cheap trade (5%) | 16% | 1% | 0% |
-  | Default (30%) | 19% | 3% | 0% |
-  | No trade (300%) | 20% | 10% | 6% |
+  | Needs unmet | Year 1 | Year 10 | Year 20 | Year 30 |
+  |---|---|---|---|---|
+  | Cheap trade (5%) | 47% | 16% | 0.5% | 0% |
+  | Default (30%) | 48% | 15% | 1% | 0% |
+  | No trade (300%) | 49% | 15% | 6% | 2% |
 - **Change the population.** Set `count` in `people.ron` (or run with `--people-count`) and press Reset. Bigger populations give each town a deeper market; try 500 against 3000 and compare unmatched trade.
 - **Change where people settle.** In `map.ron`, raise `settlement.strength` to crowd everyone into the valleys and empty the hills, or set it to 0 to spread people evenly.
+- **Watch the drift to the valley.** People move towards cheaper food. Rivermouth grows from about 500 to about 890 people by year 100 and 950 by year 200, while Ironhill shrinks from 300 to about 110. Moves are about 3% of people a year at first and fall below 0.5% as places even out. Migration clears hardship faster: at year 20, 1% can't meet their needs, against 9% with `chance: 0`. Farming, leisure and specialisation barely change.
+- **Turn crowding down.** At `crowding: 0` (in Settings or `map.ron`) nothing holds people back and almost everyone ends up round Rivermouth. Raising it spreads them out a little.
 
 - **Raise the carrying cost.** Trade shrinks, prices drift further apart between towns, and the regions become more self-sufficient.
 - **Move or add a town in `map.ron`,** then press Reset. Put one deep in the western hills and see whether the textile district moves with it.

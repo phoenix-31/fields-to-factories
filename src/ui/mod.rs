@@ -48,13 +48,13 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(SimSpeed { years_per_second: 15.0, paused: false, pending: 0.0 })
+        app.insert_resource(SimSpeed { years_per_second: 5.0, paused: false, pending: 0.0 })
             .insert_resource(ClearColor(Color::srgb(0.08, 0.09, 0.11)))
             .init_resource::<ShownTown>()
             .init_resource::<MapView>()
             .init_resource::<panel::PanelState>()
             .add_systems(Startup, setup_cameras)
-            .add_systems(Update, (drive_sim, rebuild_bars, draw_days).chain())
+            .add_systems(Update, (drive_sim, rebuild_bars, move_marks, draw_days).chain())
             .add_systems(EguiPrimaryContextPass, panel::layout);
     }
 }
@@ -161,6 +161,12 @@ fn rebuild_bars(
                     bar.spawn((segment, Sprite::from_color(Color::NONE, Vec2::ZERO), Transform::default()));
                 }
             });
+    }
+}
+
+fn move_marks(mut people: Query<(&Person, &mut Transform), Changed<Person>>) {
+    for (person, mut transform) in &mut people {
+        transform.translation = map_position(person.x, person.y).extend(person.y * 0.01);
     }
 }
 

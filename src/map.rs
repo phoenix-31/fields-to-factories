@@ -46,6 +46,12 @@ struct MapDef {
     travel_cost: f32,
     #[serde(default)]
     settlement: Settlement,
+    #[serde(default = "default_crowding")]
+    crowding: f32,
+}
+
+fn default_crowding() -> f32 {
+    1.0
 }
 
 #[derive(Resource, Clone)]
@@ -54,6 +60,7 @@ pub struct WorldMap {
     pub travel_cost: f32,
     pub elevation: Vec<f32>,
     pub fields: Vec<Vec<f32>>,
+    pub crowding: f32,
     settle_weights: Vec<f32>,
 }
 
@@ -89,6 +96,9 @@ impl WorldMap {
         if def.feature_size < 1.0 {
             return Err("feature_size must be at least 1".into());
         }
+        if def.crowding < 0.0 {
+            return Err("crowding can't be negative".into());
+        }
         if def.travel_cost < 0.0 {
             return Err("travel_cost can't be negative".into());
         }
@@ -117,7 +127,7 @@ impl WorldMap {
                 normalise(shaped.collect())
             })
             .collect();
-        let mut map = Self { towns: def.towns, travel_cost: def.travel_cost, elevation, fields, settle_weights: Vec::new() };
+        let mut map = Self { towns: def.towns, travel_cost: def.travel_cost, elevation, fields, crowding: def.crowding, settle_weights: Vec::new() };
         let follows = def.settlement.follows.as_ref().and_then(|n| catalog.resources.iter().position(|r| r == n));
         map.settle_weights = (0..ROWS * COLS)
             .map(|spot| {
@@ -158,6 +168,25 @@ impl WorldMap {
             .unwrap_or(self.settle_weights.len() - 1);
         let (col, row) = ((spot % COLS) as f32, (spot / COLS) as f32);
         ((col + jitter_x - 0.5).clamp(0.0, (COLS - 1) as f32), (row + jitter_y - 0.5).clamp(0.0, (ROWS - 1) as f32))
+    }
+
+    pub fn neighbourhood(spot: usize) -> impl Iterator<Item = usize> {
+        let (col, row) = ((spot % COLS) as i64, (spot / COLS) as i64);
+        (-1..=1)
+            .flat_map(move |dy| (-1..=1).map(move |dx| (col + dx, row + dy)))
+            .filter(|&(c, r)| c >= 0 && r >= 0 && c < COLS as i64 && r < ROWS as i64)
+            .map(|(c, r)| r as usize * COLS + c as usize)
+    }
+
+    pub fn crowding_factor(&self, spot: usize, counts: &[f32], extra: f32, average: f32) -> f32 {
+        let mean_weight = self.settle_weights.iter().sum::<f32>() / self.settle_weights.len() as f32;
+        let (mut occupants, mut capacity) = (extra, 0.0);
+        for s in Self::neighbourhood(spot) {
+            occupants += counts.get(s).copied().unwrap_or(0.0);
+            capacity += average * self.settle_weights[s] / mean_weight.max(1e-6);
+        }
+        let excess = (occupants - capacity).max(0.0) / capacity.max(1e-6);
+        1.0 / (1.0 + self.crowding * excess)
     }
 
     pub fn render(&self, catalog: &Catalog) -> String {

@@ -9,6 +9,8 @@
 // settlement    where people choose to live: denser where `follows` is good (strength 0 = ignore it,
 //               higher = more crowded on the best spots), and up to 1 + near_towns times denser
 //               right beside a town, fading over a few cells
+// crowding      how fast resources thin out when more people live round a spot than the settlement
+//               pattern expects there (0 = never, 1 = twice as crowded leaves two thirds as much each)
 
 #![enable(implicit_some)]
 (
@@ -28,4 +30,5 @@
     ],
     travel_cost: 0.02,
     settlement: (follows: "land", strength: 0.5, near_towns: 1.5),
+    crowding: 1.0,
 )
