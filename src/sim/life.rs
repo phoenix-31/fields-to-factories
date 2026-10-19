@@ -1,5 +1,6 @@
-//! Births, deaths and growing up. Children are fed by a parent, whose needs grow with theirs; living
-//! standards set the chances of a birth and of dying; a dying parent's tools pass to their eldest child.
+//! Births, deaths and growing up. Children are fed by a parent, whose needs grow with theirs, and the old
+//! are helped by their eldest grown child; living standards set the chances of a birth and of dying; a
+//! dying parent's tools pass to their eldest child.
 
 use std::collections::HashMap;
 
@@ -29,19 +30,60 @@ pub(super) fn grow_up(
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub(super) fn gather_dependents(
     population: Res<Population>,
-    mut adults: Query<(&Person, &Home, &mut Dependents), Without<Child>>,
+    mut adults: Query<(Entity, &Person, &Home, &Age, &Family, &Needs, &mut Dependents, &mut Care), Without<Child>>,
     mut children: Query<(&Child, &Age, &Needs, &mut Person, &mut Home)>,
 ) {
-    for (_, _, mut dependents) in &mut adults {
+    let life = population.life;
+    let mut grown: HashMap<Entity, Vec<(Entity, u32)>> = HashMap::new();
+    for (entity, _, _, age, family, _, _, _) in &adults {
+        if let Some(parent) = family.parent {
+            grown.entry(parent).or_default().push((entity, age.0));
+        }
+    }
+    let supporter = |parent: Entity| {
+        let kids = grown.get(&parent)?;
+        let eldest = |old: bool| {
+            kids.iter().filter(|&&(_, age)| (age >= life.old_at) == old).max_by_key(|&&(e, age)| (age, e)).map(|k| k.0)
+        };
+        eldest(false).or_else(|| eldest(true))
+    };
+    let elders: Vec<(Entity, Option<Entity>, f32, Vec<f32>)> = adults
+        .iter()
+        .filter(|p| p.3.0 >= life.old_at)
+        .map(|(entity, _, _, _, _, needs, _, care)| {
+            let managed = (1.0 - care.share) * care.own_met;
+            let share = (1.0 - managed).clamp(0.0, life.old_support);
+            (entity, supporter(entity).filter(|_| share > 0.01), share, needs.0.iter().map(|n| n.1).collect())
+        })
+        .collect();
+
+    for (_, _, _, _, _, _, mut dependents, mut care) in &mut adults {
         dependents.count = 0;
+        dependents.elders = 0;
         dependents.needs.iter_mut().for_each(|n| *n = 0.0);
+        care.by = None;
+        care.share = 0.0;
+    }
+    for (elder, helper, share, needs) in elders {
+        let Some(helper) = helper else { continue };
+        if let Ok(mut c) = adults.get_mut(elder) {
+            c.7.by = Some(helper);
+            c.7.share = share;
+        }
+        if let Ok(mut h) = adults.get_mut(helper) {
+            h.6.elders += 1;
+            for (total, amount) in h.6.needs.iter_mut().zip(&needs) {
+                *total += amount * share;
+            }
+        }
     }
     for (child, age, needs, mut person, mut home) in &mut children {
-        let Ok((parent, parent_home, mut dependents)) = adults.get_mut(child.fed_by) else { continue };
+        let Ok((_, parent, parent_home, _, _, _, mut dependents, _)) = adults.get_mut(child.fed_by) else { continue };
         dependents.count += 1;
-        let share = population.life.child_share(age.0);
+        let share = life.child_share(age.0);
         for (total, &(_, amount)) in dependents.needs.iter_mut().zip(&needs.0) {
             *total += amount * share;
         }
@@ -51,6 +93,21 @@ pub(super) fn gather_dependents(
             person.y = (y + 0.2).min((POPULATION_ROWS - 1) as f32);
         }
         *home = Home { town: parent_home.town, distance: parent_home.distance };
+    }
+}
+
+pub(super) fn share_meals(mut people: Query<(Entity, Option<&Child>, &mut Care, &mut NeedsMet)>) {
+    let own: HashMap<Entity, f32> =
+        people.iter().filter(|p| p.1.is_none()).map(|(entity, _, _, met)| (entity, met.0)).collect();
+    for (_, child, mut care, mut met) in &mut people {
+        if let Some(child) = child {
+            met.0 = own.get(&child.fed_by).copied().unwrap_or(0.0);
+            continue;
+        }
+        care.own_met = met.0;
+        if let Some(helper) = care.by.and_then(|h| own.get(&h)) {
+            met.0 = (1.0 - care.share) * met.0 + care.share * helper;
+        }
     }
 }
 
@@ -82,12 +139,10 @@ pub(super) fn births_and_deaths(
     let life = population.life;
     lineage.births = 0;
     lineage.deaths = 0;
-    let needs_met: HashMap<Entity, f32> = people.iter().map(|p| (p.0, p.3.0)).collect();
     let mut deaths = Vec::new();
     let mut births = Vec::new();
     for (entity, person, age, met, time, tastes, _, child, mut rng) in &mut people {
-        let household = child.and_then(|c| needs_met.get(&c.fed_by)).copied().unwrap_or(met.0);
-        if rng.0.next_f32() < life.death_chance(age.0, household) {
+        if rng.0.next_f32() < life.death_chance(age.0, met.0) {
             deaths.push(Death { who: entity, at: (person.x, person.y) });
         } else if child.is_none() && rng.0.next_f32() < life.birth_chance(age.0, met.0, time.leisure) {
             births.push((entity, (person.x, person.y), tastes.clone()));

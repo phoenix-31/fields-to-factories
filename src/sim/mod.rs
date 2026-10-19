@@ -125,6 +125,7 @@ impl Plugin for SimPlugin {
                     count_occupancy,
                     gather_dependents,
                     allocate_time,
+                    share_meals,
                     replace_tools,
                     clear_market,
                     migrate,

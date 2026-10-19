@@ -24,19 +24,24 @@ pub struct Sample {
     pub children: f32,
     pub births: f32,
     pub deaths: f32,
+    pub old: f32,
+    pub old_cared_for: f32,
+    pub old_short: f32,
 }
 
 #[derive(Resource, Default)]
 pub struct History(pub Vec<Sample>);
 
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub(super) fn record_history(
     clock: Res<Clock>,
     catalog: Res<Catalog>,
     markets: Res<Markets>,
     migrants: Res<Migrants>,
     lineage: Res<Lineage>,
+    population_def: Res<Population>,
     mut history: ResMut<History>,
-    people: Query<(&TimeUse, &NeedsMet, &Tools, &Home, Has<Child>)>,
+    people: Query<(&TimeUse, &NeedsMet, &Tools, &Home, Has<Child>, &Age, &Care)>,
 ) {
     let goods = catalog.len();
     let towns = markets.towns.len();
@@ -45,7 +50,17 @@ pub(super) fn record_history(
     let (mut hours, mut coverage) = (vec![0.0; goods], vec![0.0; goods]);
     let (mut trading, mut leisure, mut hungry, mut specialisation, mut n) = (0.0, 0.0, 0.0, 0.0, 0.0f32);
     let (mut population, mut children) = (0.0, 0.0);
-    for (time, needs_met, tools, home, child) in &people {
+    let (mut old, mut old_cared_for, mut old_short) = (0.0, 0.0, 0.0);
+    for (time, needs_met, tools, home, child, age, care) in &people {
+        if age.0 >= population_def.life.old_at {
+            old += 1.0;
+            if care.by.is_some() {
+                old_cared_for += 1.0;
+            }
+            if needs_met.0 < 0.999 {
+                old_short += 1.0;
+            }
+        }
         town_people[home.town] += 1.0;
         population += 1.0;
         if child {
@@ -101,6 +116,9 @@ pub(super) fn record_history(
         children,
         births: lineage.births as f32,
         deaths: lineage.deaths as f32,
+        old,
+        old_cared_for,
+        old_short,
     });
 }
 
@@ -141,7 +159,7 @@ pub fn write_csv(
     for g in catalog.goods.iter().filter(|g| g.is_tool()) {
         header.push(format!("{}_coverage", g.name));
     }
-    header.extend(["population", "children", "births", "deaths"].map(String::from));
+    header.extend(["population", "children", "births", "deaths", "old", "old_cared_for", "old_short"].map(String::from));
     writeln!(out, "{}", header.join(","))?;
 
     for s in samples {
@@ -162,7 +180,7 @@ pub fn write_csv(
                 row.push(format!("{:.4}", s.coverage[good]));
             }
         }
-        row.extend([s.population, s.children, s.births, s.deaths].map(|v| format!("{v:.0}")));
+        row.extend([s.population, s.children, s.births, s.deaths, s.old, s.old_cared_for, s.old_short].map(|v| format!("{v:.0}")));
         writeln!(out, "{}", row.join(","))?;
     }
     Ok(())

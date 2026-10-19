@@ -33,6 +33,8 @@ pub(super) struct Situation<'a> {
     last_year: &'a TimeUse,
     work_hours: f32,
     work_slices: usize,
+    years_ahead: f32,
+    invest_floor: f32,
     hour_value: f32,
     discount_rate: f32,
 }
@@ -75,7 +77,7 @@ pub(super) fn tool_gain(p: &Situation, tool: GoodId, extra: f32, made: &[f32]) -
                 * (catalog.hours_factor(good, &without) - catalog.hours_factor(good, &with_tool))
         })
         .sum();
-    saved * p.hour_value * annuity(lifetime.mean(), p.discount_rate) * extra.min(room)
+    saved * p.hour_value * annuity(lifetime.mean().min(p.years_ahead), p.discount_rate) * extra.min(room)
 }
 
 pub(super) struct DayPlan {
@@ -139,7 +141,8 @@ pub(super) fn plan_day(p: &Situation) -> DayPlan {
             });
         let Some(good) = cheapest else { continue };
         while slices > 0 && amounts[c] < amount {
-            let next = if short { best_tool(&plan).unwrap_or(good) } else { good };
+            let secured = amounts[c] >= amount * p.invest_floor;
+            let next = if short && secured { best_tool(&plan).unwrap_or(good) } else { good };
             work(next, &mut plan, &mut amounts);
             slices -= 1;
         }
@@ -169,7 +172,11 @@ pub(super) fn plan_day(p: &Situation) -> DayPlan {
     }
 
     plan.time.leisure += (SLICES - p.work_slices) as f32 * SLICE;
-    plan.needs_met = p.needs.0.iter().map(|&(c, amount)| amounts[c] / amount).fold(1.0, f32::min);
+    plan.needs_met = if p.needs.0.is_empty() {
+        1.0
+    } else {
+        p.needs.0.iter().map(|&(c, amount)| (amounts[c] / amount.max(1e-6)).min(1.0)).sum::<f32>() / p.needs.0.len() as f32
+    };
     plan.hour_value = if plan.needs_met < 0.999 {
         leisure_value(p.tastes, SLICE) / SLICE / plan.needs_met.max(0.1)
     } else {
@@ -196,6 +203,7 @@ pub(super) struct Planner {
     hour_value: &'static mut HourValue,
     age: &'static Age,
     dependents: &'static Dependents,
+    care: &'static Care,
 }
 
 pub(super) fn allocate_time(
@@ -213,7 +221,10 @@ pub(super) fn allocate_time(
         let endowments = effective(&p.endowments.0, p.crowding.0);
         let routes = plan_routes(&catalog, &access, &endowments, &owned, p.job.0, review, work_hours);
         p.job.0 = routes.job;
-        let household = Needs(p.needs.0.iter().zip(&p.dependents.needs).map(|(&(c, own), &kids)| (c, own + kids)).collect());
+        let own_share = if p.care.by.is_some() { 1.0 - p.care.share } else { 1.0 };
+        let household = Needs(
+            p.needs.0.iter().zip(&p.dependents.needs).map(|(&(c, own), &others)| (c, own * own_share + others)).collect(),
+        );
         let work_slices = if p.age.0 >= life.old_at { (SLICES as f32 * life.old_work).round() as usize } else { SLICES };
         let plan = plan_day(&Situation {
             catalog: &catalog,
@@ -225,6 +236,8 @@ pub(super) fn allocate_time(
             last_year: &p.time,
             work_hours,
             work_slices,
+            years_ahead: life.years_ahead(p.age.0),
+            invest_floor: life.invest_floor,
             hour_value: p.hour_value.0,
             discount_rate: population.discount_rate,
         });

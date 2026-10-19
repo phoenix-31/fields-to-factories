@@ -87,6 +87,7 @@ pub struct Life {
     pub adult_at: u32,
     pub old_at: u32,
     pub old_work: f32,
+    pub old_support: f32,
     pub child_needs: f32,
     pub fertile: (u32, u32),
     pub birth_chance: f32,
@@ -95,6 +96,7 @@ pub struct Life {
     pub adult_death: f32,
     pub ageing: f32,
     pub hunger_death: f32,
+    pub invest_floor: f32,
 }
 
 impl Default for Life {
@@ -104,6 +106,7 @@ impl Default for Life {
             adult_at: 12,
             old_at: 55,
             old_work: 0.5,
+            old_support: 0.5,
             child_needs: 0.25,
             fertile: (16, 40),
             birth_chance: 0.3,
@@ -112,6 +115,7 @@ impl Default for Life {
             adult_death: 0.01,
             ageing: 0.07,
             hunger_death: 0.2,
+            invest_floor: 0.0,
         }
     }
 }
@@ -129,6 +133,10 @@ impl Life {
             self.adult_death * (self.ageing * (age as f32 - 30.0)).exp()
         };
         (base + self.hunger_death * (1.0 - needs_met).max(0.0)).min(1.0)
+    }
+
+    pub fn years_ahead(&self, age: u32) -> f32 {
+        1.0 / self.death_chance(age, 1.0).max(1e-3)
     }
 
     pub fn birth_chance(&self, age: u32, needs_met: f32, spare_hours: f32) -> f32 {
@@ -218,9 +226,12 @@ impl Population {
             return Err("migration chance must be between 0 and 1, and min_gain can't be negative".into());
         }
         let l = def.life;
-        let chances = [l.birth_chance, l.child_death, l.adult_death, l.hunger_death, l.old_work];
+        let chances = [l.birth_chance, l.child_death, l.adult_death, l.hunger_death, l.old_work, l.old_support, l.invest_floor];
         if chances.iter().any(|c| !(0.0..=1.0).contains(c)) || !(0.0..=1.0).contains(&l.child_needs) {
-            return Err("life chances, old_work and child_needs must be between 0 and 1".into());
+            return Err("life chances, old_work, old_support, invest_floor and child_needs must be between 0 and 1".into());
+        }
+        if l.old_support > 0.9 {
+            return Err("old_support can be at most 0.9: the old always meet some of their own needs".into());
         }
         if l.adult_at >= l.old_at || l.fertile.0 > l.fertile.1 || l.start_age.min() < l.adult_at as f32 {
             return Err("life ages must run adult_at < old_at, with fertile (from, to) and start_age adults".into());

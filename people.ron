@@ -13,6 +13,8 @@
 //                 start_age     ages of the first people (all adults)
 //                 adult_at      age children start working and stop being fed by a parent
 //                 old_at        age people start working less: old_work of a full day
+//                 old_support   the most of an old person's needs their eldest grown child will provide;
+//                               the child covers only what the parent couldn't manage the year before
 //                 child_needs   share of an adult's needs a newborn has, rising to all of them by adult_at
 //                 fertile       ages (from, to) people can have a child
 //                 birth_chance  yearly chance of a child for someone who meets their needs with lots of
@@ -20,6 +22,8 @@
 //                 child_death, adult_death   yearly chance of dying, for children and for adults at 30;
 //                               an adult's chance grows by ageing (a share) for each year older
 //                 hunger_death  extra yearly chance of dying for a household meeting none of its needs
+//                 invest_floor  share of their needs a hungry person grows before putting hours into tools
+//                               (0 = none: a tool that pays back more hours than it costs comes first)
 // endowments    range of quality for each resource; where a person falls in it depends on the terrain
 //               where they live (see map.ron)
 // discount_rate how much less next year matters; with wear, sets how far ahead tools are valued
@@ -32,6 +36,7 @@
         adult_at: 12,
         old_at: 55,
         old_work: 0.5,
+        old_support: 0.5,
         child_needs: 0.25,
         fertile: (16, 40),
         birth_chance: 0.3,
@@ -40,6 +45,7 @@
         adult_death: 0.01,
         ageing: 0.07,
         hunger_death: 0.2,
+        invest_floor: 0.0,
     ),
     endowments: [
         ("land", (0.3, 1.7)),

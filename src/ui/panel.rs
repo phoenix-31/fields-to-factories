@@ -70,6 +70,7 @@ pub(super) struct PersonView {
     age: &'static Age,
     child: Has<Child>,
     dependents: &'static Dependents,
+    care: &'static Care,
 }
 
 pub(super) fn layout(
@@ -501,6 +502,8 @@ fn settings(ui: &mut egui::Ui, commands: &mut Commands, model: &mut Model) {
         .on_hover_text("Yearly chance a well-fed child dies.");
     ui.add(egui::Slider::new(&mut life.adult_death, 0.0..=0.1).custom_formatter(percent).custom_parser(parse_percent).text("adult deaths at 30"))
         .on_hover_text("Yearly chance a well-fed 30-year-old dies. It grows with age.");
+    ui.add(egui::Slider::new(&mut life.old_support, 0.0..=0.9).custom_formatter(percent).custom_parser(parse_percent).text("care for the old"))
+        .on_hover_text("The most of an old person's needs their eldest grown child will provide. The child covers only what the parent couldn't manage last year, up to this share.");
     ui.add(egui::Slider::new(&mut life.hunger_death, 0.0..=1.0).custom_formatter(percent).custom_parser(parse_percent).text("hunger deaths"))
         .on_hover_text("Extra yearly chance of dying for a household meeting none of its needs; half that for one meeting half.");
     ui.add(egui::Slider::new(&mut model.world_map.capacity, 0.5..=10.0).text("people per cell the land supports"))
@@ -603,6 +606,18 @@ fn hover_details(
                     let s = if p.dependents.count == 1 { "" } else { "ren" };
                     ui.label(format!("Feeds {} child{s}", p.dependents.count));
                 }
+                if p.dependents.elders > 0 {
+                    let s = if p.dependents.elders == 1 { "an old parent" } else { "old parents" };
+                    ui.label(format!("Helps {s}"));
+                }
+                let life = &model.population.life;
+                if p.age.0 >= life.old_at {
+                    let work = format!("Works {:.0}% of a day", life.old_work * 100.0);
+                    match p.care.by {
+                        Some(_) => ui.label(format!("{work}; a grown child provides {:.0}% of their needs", p.care.share * 100.0)),
+                        None => ui.label(format!("{work}, without help")),
+                    };
+                }
                 let resources: Vec<String> = catalog
                     .resources
                     .iter()
@@ -699,7 +714,9 @@ fn how_it_works(ctx: &egui::Context, open: &mut bool) {
                 ui.heading("Births and deaths");
                 ui.label(
                     "Children are born beside a parent, with tastes close to theirs, and are fed by them \
-                     until they are 12, so each child adds to the parent's working day. Spare time makes \
+                     until they are 12, so each child adds to the parent's working day. From 55 people work \
+                     half days, and their eldest grown child makes up what they can't manage, up to half of \
+                     what they need. Spare time makes \
                      a birth more likely; age and going short of food make death more likely. As numbers \
                      grow, crowding thins out the land, food takes longer to grow, and growth slows. When \
                      someone dies, their tools pass to their eldest child.",

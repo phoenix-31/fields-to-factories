@@ -98,7 +98,9 @@ See the CHANGELOG. Settled while building: a child costs a quarter of an adult's
 
 Follow-ups:
 
-- [ ] **Nobody looks after the old.** From 55 people work half days, and many can't grow enough food alone. Grown children should help their parents, just as parents feed children.
+- [x] **Care for the old:** done. Need-based help from the eldest grown child, up to half their needs.
+- [ ] **?** Care barely matters at the default settings because few live past 55. Is that right, or should old age be longer and gentler, so that supporting parents becomes a real weight on families?
+- [ ] Help for the old with no living children (neighbours, a town poor fund) would be a first step towards public provision.
 - [ ] **No couples:** each child has one parent who bears its whole cost. Couples would share it and make households a real unit.
 - [ ] **Child labour:** children don't work until 12. Historically they helped on the farm from about 7.
 - [ ] **A slow start:** the founders are all adults of similar age, so births dip around year 25 while the first children are still too young. A starting population with children and a spread of ages would smooth it.
@@ -126,3 +128,4 @@ Follow-ups:
 - **2026-10-18:** chose emergent market towns, and births and deaths as the next stage. Split `sim.rs` and added `new_person` in preparation. Open questions on births and deaths written up.
 - **2026-10-18:** births and deaths designed: start at 300, living standards drive births and deaths, ages with dependent children, newborns beside a parent with similar tastes, and inheritance of tools.
 - **2026-10-18:** births and deaths built. Population grows from 300 to a Malthusian ceiling of about 1,050–1,100, and gains turn into people rather than leisure. Follow-ups noted, starting with care for the old.
+- **2026-10-19:** care for the old built, need-based. Found and fixed: being cold counted as starving, children shown as going short, and the old valuing tools over 25 years. A floor on hungry investment was tested and left off by default.

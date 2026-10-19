@@ -1,5 +1,24 @@
 # Changelog
 
+## Care for the old
+
+### Added
+- **Grown children help their old parents.** Each year, a person over 55 is helped by their eldest living grown child (one under 55 if possible). The child takes on the part of the parent's needs the parent couldn't manage the year before, up to half (`old_support` in `people.ron`, and a Settings slider). Help is need-based: a parent who copes alone costs their child nothing.
+- Hover details say whether an old person is being helped and with how much, and whether someone helps an old parent. The Population chart has an "over 55" line; the CSV adds `old`, `old_cared_for` and `old_short`.
+- **3 more tests** (45 in all): the old are helped only by their own grown children and never beyond `old_support`, children eat exactly as their household does, and the old look fewer years ahead.
+
+### Fixed
+- **Being cold counted as starving.** A household's needs met was its *worst* need, so someone fully fed but without clothes scored 0% and got the full extra chance of dying. It's now the average across needs, so they score 50%.
+- **Children were shown as going short.** Their own needs-met was never set; it now matches their household's.
+- **The old valued tools as if they'd live for ever.** A tool's value now counts only the years a person can expect to live (one over their yearly chance of dying), so a 70-year-old no longer pours their last hours into a 25-year plough.
+
+### Changed
+- **`invest_floor`** in `people.ron` sets how much of their needs a hungry person grows before investing in tools. The default is 0, the existing rule: tested at 0.5 and 0.75, a floor slowed recovery from the hungry start and lowered the population, because a plough repays a hungry year many times over.
+
+### Results
+- **The population settles higher,** at about 1,200–1,380 from year 200 (it was 1,050–1,100), mostly because being cold is no longer as deadly as starving. About 11% of households go short at the ceiling.
+- **Care helps a little.** Only about 60 people are over 55, and most can feed themselves on half days. With care, 12% of the old go short against 13% without; the cost to their children trims the population by about 2%.
+
 ## Births and deaths
 
 ### Added

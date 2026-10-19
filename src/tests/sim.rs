@@ -154,7 +154,8 @@ fn population_counts_match_births_and_deaths() {
 fn children_are_fed_then_grow_up() {
     let mut app = run(PEOPLE, 300, 40);
     let adult_at = app.world().resource::<Population>().life.adult_at;
-    let born_this_year = history(&app).last().unwrap().births as u32;
+    let last = history(&app).last().unwrap();
+    let (born, died) = (last.births as u32, last.deaths as u32);
     let world = app.world_mut();
     let mut people = world.query::<(Entity, &Age, &Family, Option<&Child>, &Dependents)>();
     let all: Vec<_> = people.iter(world).map(|(e, a, f, c, d)| (e, a.0, f.parent, c.copied(), d.count)).collect();
@@ -164,7 +165,7 @@ fn children_are_fed_then_grow_up() {
     }
     let fed: u32 = all.iter().map(|p| p.4).sum();
     let children = all.iter().filter(|p| p.3.is_some()).count() as u32;
-    assert!(fed + born_this_year >= children, "{fed} fed of {children} children");
+    assert!(fed + born + died >= children, "{fed} fed of {children} children");
     for &(_, _, _, child, _) in &all {
         if let Some(c) = child {
             assert!(all.iter().any(|p| p.0 == c.fed_by && p.3.is_none()), "a child is fed by someone who isn't an adult");
@@ -180,4 +181,39 @@ fn heirs_keep_the_better_tools() {
     assert_eq!(heir.years_left, [20.0, 5.0]);
     assert_eq!(heir.life, [30.0, 10.0]);
     assert_eq!(heir.progress, [1.0, 0.5]);
+}
+
+#[test]
+fn the_old_are_helped_by_their_own_grown_children() {
+    let mut app = run(PEOPLE, 300, 80);
+    let life = app.world().resource::<Population>().life;
+    let world = app.world_mut();
+    let mut people = world.query::<(Entity, &Age, &Family, &Care, Has<Child>)>();
+    let all: Vec<_> = people.iter(world).map(|(e, a, f, c, child)| (e, a.0, f.parent, c.by, c.share, child)).collect();
+    let helped: Vec<_> = all.iter().filter(|p| p.3.is_some()).collect();
+    assert!(!helped.is_empty(), "no one old is being helped by year 80");
+    for &&(elder, age, _, by, share, _) in &helped {
+        assert!(age >= life.old_at, "a {age}-year-old is being looked after");
+        assert!(share > 0.0 && share <= life.old_support);
+        let helper = all.iter().find(|p| Some(p.0) == by).expect("helper is alive");
+        assert_eq!(helper.2, Some(elder), "the helper isn't the old person's child");
+        assert!(!helper.5, "the helper is a child");
+    }
+}
+
+#[test]
+fn children_eat_as_well_as_their_household() {
+    let mut app = run(PEOPLE, 300, 40);
+    let world = app.world_mut();
+    let mut children = world.query::<(&Child, &Family, &Age, &NeedsMet)>();
+    let pairs: Vec<_> = children
+        .iter(world)
+        .filter(|(c, f, a, _)| a.0 >= 1 && f.parent == Some(c.fed_by))
+        .map(|(c, _, _, m)| (c.fed_by, m.0))
+        .collect();
+    let mut adults = world.query::<&NeedsMet>();
+    assert!(pairs.len() > 10);
+    for (parent, met) in pairs {
+        assert_eq!(met, adults.get(world, parent).expect("parent alive").0);
+    }
 }

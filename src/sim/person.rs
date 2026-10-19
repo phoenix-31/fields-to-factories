@@ -96,7 +96,21 @@ pub struct Family {
 #[derive(Component, Default)]
 pub struct Dependents {
     pub count: u32,
+    pub elders: u32,
     pub needs: Vec<f32>,
+}
+
+#[derive(Component)]
+pub struct Care {
+    pub by: Option<Entity>,
+    pub share: f32,
+    pub own_met: f32,
+}
+
+impl Default for Care {
+    fn default() -> Self {
+        Self { by: None, share: 0.0, own_met: 1.0 }
+    }
 }
 
 pub(super) fn spawn_people(
@@ -171,7 +185,8 @@ pub(super) fn new_person(
         NeedsMet::default(),
         HourValue(INITIAL_HOUR_VALUE),
         PersonRng(Rng(seed)),
-        Dependents { count: 0, needs: vec![0.0; population.needs.len()] },
+        Dependents { count: 0, elders: 0, needs: vec![0.0; population.needs.len()] },
+        Care::default(),
     )
 }
 

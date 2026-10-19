@@ -4,7 +4,7 @@ use bevy_egui::egui;
 use egui_plot::{FilledArea, HoverPosition, Line, Plot, PlotPoints};
 
 use super::{
-    CHILD_COLOR, Expanded, HUNGRY_COLOR, POPULATION_COLOR, LEISURE_COLOR, SPECIALISATION_COLOR, TRADING_COLOR, color32, lighten, sector_swatch, swatch,
+    CHILD_COLOR, Expanded, OLD_COLOR, HUNGRY_COLOR, POPULATION_COLOR, LEISURE_COLOR, SPECIALISATION_COLOR, TRADING_COLOR, color32, lighten, sector_swatch, swatch,
     visible_sectors,
 };
 use crate::goods::{Catalog, GoodId, SectorId};
@@ -254,6 +254,7 @@ pub(super) fn population_chart(ui: &mut egui::Ui, history: &History) {
     let lines = [
         ("people", POPULATION_COLOR, series(&|s| s.population)),
         ("children", CHILD_COLOR, series(&|s| s.children)),
+        ("over 55", OLD_COLOR, series(&|s| s.old)),
         ("births a year", LEISURE_COLOR, series(&|s| s.births)),
         ("deaths a year", HUNGRY_COLOR, series(&|s| s.deaths)),
     ];

@@ -25,6 +25,7 @@ const TRADING_COLOR: [u8; 3] = [64, 196, 180];
 const HUNGRY_COLOR: [u8; 3] = [214, 64, 64];
 const SPECIALISATION_COLOR: [u8; 3] = [250, 250, 250];
 const CHILD_COLOR: [u8; 3] = [235, 225, 200];
+const OLD_COLOR: [u8; 3] = [170, 150, 210];
 const POPULATION_COLOR: [u8; 3] = [240, 200, 120];
 
 #[derive(Resource, Default)]

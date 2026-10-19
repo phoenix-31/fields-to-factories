@@ -94,3 +94,11 @@ fn newborn_tastes_sit_between_parent_and_fresh_draw() {
     let blended = Taste::Log { weight: 0.8 }.blend(&Taste::Log { weight: 1.2 });
     assert!(matches!(blended, Taste::Log { weight } if (weight - 1.0).abs() < 1e-6));
 }
+
+#[test]
+fn the_old_look_fewer_years_ahead() {
+    let life = Life::default();
+    assert!(life.years_ahead(25) > 30.0);
+    assert!(life.years_ahead(70) < life.years_ahead(55));
+    assert!(life.years_ahead(70) < 10.0);
+}
